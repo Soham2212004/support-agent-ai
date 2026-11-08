@@ -1,0 +1,45 @@
+name: support-agent-ai
+
+services:
+  # ---------- 1. PostgreSQL (latest) ----------
+  db:
+    image: postgres:latest
+    container_name: support_agent_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PostgreSQL 18+ images expect the mount at /var/lib/postgresql
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ---------- 2. Django admin panel ----------
+  backend:
+    build: ./backend
+    container_name: support_agent_admin
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+
+  # ---------- 3. React website (production build served by Nginx) ----------
+  frontend:
+    build: ./frontend
+    container_name: support_agent_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:

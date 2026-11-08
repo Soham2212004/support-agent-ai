@@ -1,0 +1,12 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+{% if pending_client_requests %}
+  <div role="status" style="margin:0 0 20px;padding:14px 18px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;font-size:15px;">
+    <strong>{{ pending_client_requests }} new client request{{ pending_client_requests|pluralize }}</strong>
+    waiting for your approval.
+    <a href="{% url 'admin:core_clientaccount_changelist' %}?status__exact=pending" style="margin-left:8px;font-weight:700;color:#78350f;text-decoration:underline;">Review now</a>
+  </div>
+{% endif %}
+{{ block.super }}
+{% endblock %}
