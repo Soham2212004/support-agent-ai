@@ -5,6 +5,7 @@ from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
+from pgvector.django import VectorField
 
 from .storage import delete_file
 
@@ -90,6 +91,18 @@ class ClientDocument(models.Model):
     page_count = models.PositiveIntegerField(null=True, blank=True)
     word_count = models.PositiveIntegerField(default=0)
     char_count = models.PositiveIntegerField(default=0)
+
+    class IndexStatus(models.TextChoices):
+        PENDING = "pending", "Not indexed"
+        PROCESSING = "processing", "Processing"
+        READY = "ready", "Ready"
+        FAILED = "failed", "Failed"
+
+    index_status = models.CharField(max_length=12, choices=IndexStatus.choices, default=IndexStatus.PENDING)
+    index_error = models.TextField(blank=True, default="")
+    chunk_count = models.PositiveIntegerField(default=0)
+    index_started_at = models.DateTimeField(null=True, blank=True)
+    indexed_at = models.DateTimeField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -106,3 +119,28 @@ def remove_document_file(sender, instance, **kwargs):
     """Whenever a document row is deleted (by the user, in admin, or with the account), remove its file."""
     path = instance.file_path
     transaction.on_commit(lambda: delete_file(path))
+
+
+class DocumentChunk(models.Model):
+    """A short passage of a document, with its embedding. Search works on these."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="chunks")
+    document = models.ForeignKey(ClientDocument, on_delete=models.CASCADE, related_name="chunks")
+    ordinal = models.PositiveIntegerField()  # 1, 2, 3 ... in reading order
+    section_label = models.CharField(max_length=200, blank=True)  # "Page 3" or a DOCX heading
+    page_number = models.PositiveIntegerField(null=True, blank=True)
+    text = models.TextField()
+    char_count = models.PositiveIntegerField()
+    # no fixed size, so a different embedding model can be used later without a schema change
+    embedding = VectorField(dimensions=None)
+    embedding_model = models.CharField(max_length=100)
+
+    class Meta:
+        verbose_name = "document chunk"
+        verbose_name_plural = "document chunks"
+        constraints = [
+            models.UniqueConstraint(fields=["document", "ordinal"], name="unique_chunk_ordinal"),
+        ]
+
+    def __str__(self):
+        return f"{self.document.original_filename} #{self.ordinal}"

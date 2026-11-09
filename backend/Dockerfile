@@ -5,8 +5,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# CPU-only PyTorch (the default build is several GB larger because it includes GPU libraries)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Download the embedding model at build time, so the running container never needs the internet for it
+ENV HF_HOME=/opt/hf-cache
+ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
+ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
+ENV HF_HUB_OFFLINE=1
 
 COPY . .
 

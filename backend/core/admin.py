@@ -3,7 +3,7 @@ from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
 from django.utils.html import format_html
 
-from .models import ClientAccount, ClientDocument
+from .models import ClientAccount, ClientDocument, DocumentChunk
 admin.site.site_header = "Support Agent AI"
 admin.site.site_title = "Support Agent AI Admin"
 admin.site.index_title = "Welcome"
@@ -70,13 +70,17 @@ class ClientAccountAdmin(admin.ModelAdmin):
 
 @admin.register(ClientDocument)
 class ClientDocumentAdmin(admin.ModelAdmin):
-    list_display = ("original_filename", "account", "file_type", "size_kb", "word_count", "uploaded_at")
+    list_display = (
+        "original_filename", "account", "file_type", "size_kb", "word_count", "index_status", "chunk_count",
+        "uploaded_at",
+    )
     list_filter = ("file_type", "uploaded_at")
     search_fields = ("original_filename", "account__email", "account__company_name")
 
     fields = (
         "account", "original_filename", "file_type", "size_bytes", "page_count", "word_count",
-        "char_count", "file_path", "content_hash", "uploaded_at", "extracted_text", "sections",
+        "char_count", "file_path", "content_hash", "uploaded_at", "index_status", "chunk_count",
+        "indexed_at", "index_error", "extracted_text", "sections",
     )
     readonly_fields = fields  # view only
 
@@ -89,3 +93,25 @@ class ClientDocumentAdmin(admin.ModelAdmin):
     @admin.display(description="Size")
     def size_kb(self, obj):
         return f"{obj.size_bytes / 1024:.0f} KB"
+
+@admin.register(DocumentChunk)
+class DocumentChunkAdmin(admin.ModelAdmin):
+    list_display = ("document", "ordinal", "section_label", "page_number", "char_count", "embedding_model")
+    list_filter = ("embedding_model",)
+    search_fields = ("text", "document__original_filename", "account__email")
+    list_select_related = ("document",)
+
+    fields = (
+        "account", "document", "ordinal", "section_label", "page_number", "char_count",
+        "embedding_model", "text",
+    )
+    readonly_fields = fields  # view only; the vector itself is not shown
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer("embedding")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

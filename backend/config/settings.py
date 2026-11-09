@@ -93,3 +93,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Original files are saved here (later this becomes an S3 bucket).
 STORAGE_ROOT = Path(os.environ.get("STORAGE_ROOT", BASE_DIR / "storage"))
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB (nginx.conf allows 6m to leave room for the form overhead)
+
+# ---- Search / embeddings ----
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
+CHUNK_SIZE_CHARS = 1200
+CHUNK_OVERLAP_CHARS = 200
+SEARCH_TOP_K = 5
