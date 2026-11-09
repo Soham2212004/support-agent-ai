@@ -3,7 +3,7 @@ name: support-agent-ai
 services:
   # ---------- 1. PostgreSQL (latest) ----------
   db:
-    image: postgres:latest
+    image: pgvector/pgvector:pg18
     container_name: support_agent_db
     restart: unless-stopped
     environment:

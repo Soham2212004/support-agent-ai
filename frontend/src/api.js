@@ -76,4 +76,6 @@ export const api = {
     return request("/document/", { method: "POST", body: form, auth: true });
   },
   deleteDocument: () => request("/document/", { method: "DELETE", auth: true }),
+  reindexDocument: () => request("/document/reindex/", { method: "POST", auth: true }),
+  searchDocument: (query) => request("/document/search/", { method: "POST", body: { query }, auth: true }),
 };

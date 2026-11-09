@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
+import DocumentSearch from "./DocumentSearch.jsx";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED = [".pdf", ".docx", ".txt"];
@@ -32,6 +33,33 @@ export default function DocumentUpload() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // while the document is being prepared for search, check again every 3 seconds
+  useEffect(() => {
+    if (doc?.index_status !== "processing") return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const data = await api.getDocument();
+        setDoc(data.document);
+      } catch {
+        /* try again on the next tick */
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [doc?.index_status]);
+
+  async function reindex() {
+    setError("");
+    setBusy(true);
+    try {
+      const data = await api.reindexDocument();
+      setDoc(data.document);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function upload(file) {
     setError("");
@@ -164,11 +192,34 @@ export default function DocumentUpload() {
         </div>
       </dl>
 
+      <div className={`index-status index-${doc.index_status}`} role="status">
+        {doc.index_status === "processing" && (
+          <p>Preparing your document for search… this can take a minute for large files.</p>
+        )}
+        {doc.index_status === "ready" && (
+          <p>Ready for search. Your document is split into {doc.chunk_count} passages.</p>
+        )}
+        {(doc.index_status === "failed" || doc.index_status === "pending") && (
+          <>
+            <p>
+              {doc.index_status === "failed"
+                ? doc.index_error || "Preparing the document for search failed."
+                : "This document hasn’t been prepared for search yet."}
+            </p>
+            <button type="button" className="button button-small" onClick={reindex} disabled={busy}>
+              {doc.index_status === "failed" ? "Try again" : "Prepare now"}
+            </button>
+          </>
+        )}
+      </div>
+
       <h3>Text we extracted</h3>
       <pre className="doc-preview">
         {doc.preview}
         {doc.preview_truncated ? "…" : ""}
       </pre>
+
+      {doc.index_status === "ready" && <DocumentSearch />}
 
       <div className="doc-actions">
         <button type="button" className="button button-ghost" onClick={remove} disabled={busy}>
