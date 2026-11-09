@@ -116,25 +116,26 @@ class DocumentChunkAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
+from django.utils import timezone  # noqa: E402
+from django.utils.html import format_html  # noqa: E402
+from django.utils.safestring import mark_safe  # noqa: E402
+
 from .models import Conversation, Message  # noqa: E402
 
 
-class MessageInline(admin.TabularInline):
-    model = Message
-    extra = 0
-    can_delete = False
-    fields = ("seq", "role", "content", "is_fallback", "provider", "llm_model", "tokens_in", "tokens_out", "status")
-    readonly_fields = fields
-
-    def has_add_permission(self, request, obj=None):
-        return False
+def _when(value):
+    """Show a time in the project's time zone, with seconds."""
+    return timezone.localtime(value).strftime("%d %b %Y, %I:%M:%S %p")
 
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ("id", "account", "message_count", "created_at", "updated_at")
-    search_fields = ("account__email",)
-    inlines = [MessageInline]
+    list_display = ("id", "account", "message_count", "started", "last_message")
+    list_select_related = ("account",)
+    search_fields = ("account__email", "account__name", "account__company_name")
+
+    fields = ("account", "started", "last_message", "transcript")
+    readonly_fields = fields
 
     def has_add_permission(self, request):
         return False
@@ -145,3 +146,65 @@ class ConversationAdmin(admin.ModelAdmin):
     @admin.display(description="Messages")
     def message_count(self, obj):
         return obj.messages.count()
+
+    @admin.display(description="Started", ordering="created_at")
+    def started(self, obj):
+        return _when(obj.created_at)
+
+    @admin.display(description="Last message", ordering="updated_at")
+    def last_message(self, obj):
+        return _when(obj.updated_at)
+
+    @admin.display(description="Conversation")
+    def transcript(self, obj):
+        messages = list(obj.messages.order_by("seq"))
+        if not messages:
+            return "No messages yet."
+
+        blocks = []
+        asked_at = None
+        for message in messages:
+            is_user = message.role == Message.Role.USER
+            details = []
+
+            if is_user:
+                who = obj.account.name
+                background = "rgba(65, 120, 150, 0.18)"
+                asked_at = message.created_at
+            else:
+                who = "Assistant"
+                background = "rgba(245, 165, 36, 0.22)" if message.is_fallback else "rgba(128, 128, 128, 0.14)"
+                if asked_at:
+                    details.append(f"answered in {(message.created_at - asked_at).total_seconds():.1f}s")
+                if message.provider:
+                    details.append(f"{message.provider} / {message.llm_model}")
+                if message.tokens_in or message.tokens_out:
+                    details.append(f"{message.tokens_in} tokens in, {message.tokens_out} out")
+                if message.is_fallback:
+                    details.append(f"no answer found ({message.fallback_reason or 'fallback'})")
+                if message.status == Message.Status.PARTIAL:
+                    details.append("interrupted")
+                sources = ", ".join(f"[{c.get('n')}] {c.get('label', '')}" for c in (message.citations or []))
+                if sources:
+                    details.append(f"sources: {sources}")
+
+            extra = ""
+            if details:
+                extra = format_html(
+                    '<div style="margin-top:8px;font-size:12px;opacity:0.75;">{}</div>', " | ".join(details)
+                )
+
+            blocks.append(
+                format_html(
+                    '<div style="margin:0 0 12px;padding:10px 14px;border-radius:8px;background:{};">'
+                    '<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:6px;'
+                    'font-size:12px;opacity:0.85;"><strong>{}</strong><span>{}</span></div>'
+                    '<div style="white-space:pre-wrap;overflow-wrap:anywhere;">{}</div>{}</div>',
+                    background,
+                    who,
+                    _when(message.created_at),
+                    message.content or "(empty)",
+                    extra,
+                )
+            )
+        return mark_safe("".join(blocks))
