@@ -115,3 +115,33 @@ class DocumentChunkAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+from .models import Conversation, Message  # noqa: E402
+
+
+class MessageInline(admin.TabularInline):
+    model = Message
+    extra = 0
+    can_delete = False
+    fields = ("seq", "role", "content", "is_fallback", "provider", "llm_model", "tokens_in", "tokens_out", "status")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Conversation)
+class ConversationAdmin(admin.ModelAdmin):
+    list_display = ("id", "account", "message_count", "created_at", "updated_at")
+    search_fields = ("account__email",)
+    inlines = [MessageInline]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False  # view only
+
+    @admin.display(description="Messages")
+    def message_count(self, obj):
+        return obj.messages.count()

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api, clearToken, getToken } from "../api.js";
 import DocumentUpload from "../components/DocumentUpload.jsx";
+import Chat from "../components/Chat.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -94,6 +95,7 @@ export default function Dashboard() {
         <p className="page-lede">{account.company_name}</p>
       </div>
       <DocumentUpload />
+      <Chat />
     </main>
   );
 }
