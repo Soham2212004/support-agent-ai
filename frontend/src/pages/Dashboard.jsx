@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api, clearToken, getToken } from "../api.js";
 import DocumentUpload from "../components/DocumentUpload.jsx";
+import Chat from "../components/Chat.jsx";
+import BotSettings from "../components/BotSettings.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [account, setAccount] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("chat");
+  const [settingsRevision, setSettingsRevision] = useState(0);
 
   const load = useCallback(async () => {
     setError("");
@@ -93,7 +97,34 @@ export default function Dashboard() {
         <h1>Welcome, {account.name.split(" ")[0]}</h1>
         <p className="page-lede">{account.company_name}</p>
       </div>
-      <DocumentUpload />
+
+      <nav className="dash-tabs" aria-label="Dashboard sections">
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "chat" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("chat")}
+          aria-current={activeTab === "chat" ? "page" : undefined}
+        >
+          Documents &amp; Test Chat
+        </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "settings" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+          aria-current={activeTab === "settings" ? "page" : undefined}
+        >
+          Bot Settings
+        </button>
+      </nav>
+
+      {activeTab === "chat" ? (
+        <>
+          <DocumentUpload />
+          <Chat settingsRevision={settingsRevision} />
+        </>
+      ) : (
+        <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />
+      )}
     </main>
   );
 }

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api, documents
+from . import api, bot_settings, chat, documents
 
 urlpatterns = [
     path("register/", api.register, name="api-register"),
@@ -9,4 +9,7 @@ urlpatterns = [
     path("document/", documents.document, name="api-document"),
     path("document/reindex/", documents.reindex, name="api-document-reindex"),
     path("document/search/", documents.search, name="api-document-search"),
+    path("chat/", chat.state, name="api-chat"),
+    path("chat/messages/", chat.send_message, name="api-chat-message"),
+    path("bot-settings/", bot_settings.bot_settings, name="api-bot-settings"),
 ]

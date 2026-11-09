@@ -144,3 +144,136 @@ class DocumentChunk(models.Model):
 
     def __str__(self):
         return f"{self.document.original_filename} #{self.ordinal}"
+
+class Conversation(models.Model):
+    """One chat between a client and the bot, on the client's own document (the test chat)."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="conversations")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "conversation"
+        verbose_name_plural = "conversations"
+
+    def __str__(self):
+        return f"Conversation {self.pk} ({self.account.email})"
+
+
+class Message(models.Model):
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    class Status(models.TextChoices):
+        COMPLETE = "complete", "Complete"
+        PARTIAL = "partial", "Partial"
+
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    seq = models.PositiveIntegerField()  # 1, 2, 3 ... in the order the messages were sent
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField(blank=True)
+    citations = models.JSONField(default=list, blank=True)  # [{"n", "label", "page", "text"}]
+    is_fallback = models.BooleanField(default=False)
+    fallback_reason = models.CharField(max_length=20, blank=True, default="")  # weak_evidence or no_answer
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.COMPLETE)
+    provider = models.CharField(max_length=20, blank=True, default="")
+    llm_model = models.CharField(max_length=100, blank=True, default="")
+    tokens_in = models.PositiveIntegerField(default=0)
+    tokens_out = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["seq"]
+        verbose_name = "message"
+        verbose_name_plural = "messages"
+        constraints = [
+            models.UniqueConstraint(fields=["conversation", "seq"], name="unique_message_seq"),
+        ]
+
+    def __str__(self):
+        return f"{self.role} #{self.seq}"
+
+
+class ChatUsage(models.Model):
+    """How many test messages a client has used on one (UTC) day. Enforces the daily limit."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="chat_usage")
+    day = models.DateField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "chat usage"
+        verbose_name_plural = "chat usage"
+        constraints = [
+            models.UniqueConstraint(fields=["account", "day"], name="unique_chat_usage_day"),
+        ]
+
+
+DEFAULT_BOT_GREETING = "Hello! How can I help you today?"
+DEFAULT_BOT_FALLBACK = (
+    "I couldn't find the answer to that in your document. "
+    "Try rephrasing your question, or ask about something the document covers."
+)
+
+
+class BotSettings(models.Model):
+    """Client customization for their support chatbot."""
+
+    class Tone(models.TextChoices):
+        FRIENDLY = "friendly", "Friendly"
+        PROFESSIONAL = "professional", "Professional"
+        CONCISE = "concise", "Concise"
+
+    account = models.OneToOneField(ClientAccount, on_delete=models.CASCADE, related_name="bot_settings")
+    name = models.CharField(max_length=100, blank=True, default="")
+    greeting = models.TextField(blank=True, default=DEFAULT_BOT_GREETING)
+    tone = models.CharField(max_length=20, choices=Tone.choices, default=Tone.FRIENDLY)
+    custom_instructions = models.TextField(blank=True, default="")
+    fallback_message = models.TextField(blank=True, default=DEFAULT_BOT_FALLBACK)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "bot settings"
+        verbose_name_plural = "bot settings"
+
+    def __str__(self):
+        return f"Settings for {self.account.company_name} ({self.display_name})"
+
+    @property
+    def display_name(self):
+        val = (self.name or "").strip()
+        if val:
+            return val
+        if self.account_id and self.account.company_name:
+            return f"{self.account.company_name} Assistant"
+        return "Support Assistant"
+
+    @property
+    def active_greeting(self):
+        return (self.greeting or "").strip() or DEFAULT_BOT_GREETING
+
+    @property
+    def active_fallback(self):
+        return (self.fallback_message or "").strip() or DEFAULT_BOT_FALLBACK
+
+    @classmethod
+    def get_for_account(cls, account):
+        obj = cls.objects.filter(account=account).first()
+        if obj is None:
+            default_name = f"{account.company_name} Assistant" if account.company_name else "Support Assistant"
+            obj, _ = cls.objects.get_or_create(
+                account=account,
+                defaults={
+                    "name": default_name,
+                    "greeting": DEFAULT_BOT_GREETING,
+                    "tone": cls.Tone.FRIENDLY,
+                    "custom_instructions": "",
+                    "fallback_message": DEFAULT_BOT_FALLBACK,
+                },
+            )
+        return obj
+

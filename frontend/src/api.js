@@ -78,4 +78,6 @@ export const api = {
   deleteDocument: () => request("/document/", { method: "DELETE", auth: true }),
   reindexDocument: () => request("/document/reindex/", { method: "POST", auth: true }),
   searchDocument: (query) => request("/document/search/", { method: "POST", body: { query }, auth: true }),
+  getBotSettings: () => request("/bot-settings/", { auth: true }),
+  saveBotSettings: (settings) => request("/bot-settings/", { method: "POST", body: settings, auth: true }),
 };
