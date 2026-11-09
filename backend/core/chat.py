@@ -12,7 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import llm, rag
 from .api import client_required, error, read_json
-from .models import ChatUsage, ClientDocument, Conversation, Message
+from .models import BotSettings, ChatUsage, ClientDocument, Conversation, Message
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,7 @@ def state(request):
     account = request.client_account
     document = ClientDocument.objects.filter(account=account).first()
     conversation = Conversation.objects.filter(account=account).order_by("-updated_at").first()
+    settings = BotSettings.get_for_account(account)
 
     messages = []
     if conversation:
@@ -89,6 +90,13 @@ def state(request):
                 {"id": p["id"], "label": p["label"], "model": p["model"]} for p in llm.available_providers()
             ],
             "default_provider": llm.default_provider_id(),
+            "bot_settings": {
+                "name": settings.name or settings.display_name,
+                "greeting": settings.active_greeting,
+                "tone": settings.tone,
+                "custom_instructions": settings.custom_instructions,
+                "fallback_message": settings.active_fallback,
+            },
         }
     )
 

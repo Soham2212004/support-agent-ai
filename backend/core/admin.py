@@ -3,7 +3,7 @@ from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
 from django.utils.html import format_html
 
-from .models import ClientAccount, ClientDocument, DocumentChunk
+from .models import ClientAccount, ClientDocument, DocumentChunk, BotSettings
 admin.site.site_header = "Support Agent AI"
 admin.site.site_title = "Support Agent AI Admin"
 admin.site.index_title = "Welcome"
@@ -208,3 +208,19 @@ class ConversationAdmin(admin.ModelAdmin):
                 )
             )
         return mark_safe("".join(blocks))
+
+
+@admin.register(BotSettings)
+class BotSettingsAdmin(admin.ModelAdmin):
+    list_display = ("account", "name", "tone", "updated_at")
+    list_select_related = ("account",)
+    search_fields = ("account__email", "account__company_name", "name")
+    list_filter = ("tone", "updated_at")
+
+    fieldsets = (
+        ("Client", {"fields": ("account",)}),
+        ("Bot Personality", {"fields": ("name", "tone", "greeting")}),
+        ("Instructions & Fallback", {"fields": ("custom_instructions", "fallback_message")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+    readonly_fields = ("created_at", "updated_at")

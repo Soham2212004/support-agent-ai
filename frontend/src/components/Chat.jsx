@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, clearToken } from "../api.js";
 import { getChatState, sendChatMessage } from "../chatApi.js";
 
-export default function Chat() {
+export default function Chat({ settingsRevision = 0 }) {
   const [info, setInfo] = useState(null);
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -44,6 +44,13 @@ export default function Chat() {
     load();
     return () => abortRef.current?.abort();
   }, [load]);
+
+  // Refresh settings when changed from BotSettings tab
+  useEffect(() => {
+    if (initialised.current && settingsRevision > 0) {
+      load();
+    }
+  }, [settingsRevision, load]);
 
   // until the document is ready for search, check again every 4 seconds
   useEffect(() => {
@@ -134,13 +141,16 @@ export default function Chat() {
 
   const limitReached = usage.limit > 0 && usage.used >= usage.limit;
 
+  const botName = info?.bot_settings?.name || "Assistant";
+  const greeting = info?.bot_settings?.greeting;
+
   return (
     <section className="chat-card" aria-labelledby="chat-title">
       <div className="chat-head">
         <div>
-          <h2 id="chat-title">Chat with your document</h2>
+          <h2 id="chat-title">Chat with {botName}</h2>
           <p className="upload-help">
-            Ask a question and the answer comes only from your document, with its sources.
+            Ask a question and the answer comes directly from your document, guided by your bot settings.
           </p>
         </div>
         {info?.document_ready && (
@@ -168,13 +178,30 @@ export default function Chat() {
         <>
           <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-label="Conversation">
             {messages.length === 0 && (
-              <p className="chat-empty">Try asking: "What is this document about?"</p>
+              <>
+                {greeting && (
+                  <div className="chat-msg chat-assistant chat-greeting">
+                    <div className="chat-author-label">
+                      <strong>{botName}</strong>
+                    </div>
+                    <p>{greeting}</p>
+                  </div>
+                )}
+                <p className="chat-empty">
+                  Try saying "Hello", or ask a question about your uploaded document.
+                </p>
+              </>
             )}
             {messages.map((m) => (
               <div
                 key={m.key}
                 className={`chat-msg chat-${m.role}${m.is_fallback ? " chat-fallback" : ""}`}
               >
+                {m.role === "assistant" && (
+                  <div className="chat-author-label">
+                    <strong>{botName}</strong>
+                  </div>
+                )}
                 <p>{m.content || (m.pending ? "Thinking..." : "")}</p>
                 {m.citations?.length > 0 && (
                   <ul className="chat-sources" aria-label="Sources">

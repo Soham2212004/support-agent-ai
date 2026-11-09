@@ -209,3 +209,71 @@ class ChatUsage(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["account", "day"], name="unique_chat_usage_day"),
         ]
+
+
+DEFAULT_BOT_GREETING = "Hello! How can I help you today?"
+DEFAULT_BOT_FALLBACK = (
+    "I couldn't find the answer to that in your document. "
+    "Try rephrasing your question, or ask about something the document covers."
+)
+
+
+class BotSettings(models.Model):
+    """Client customization for their support chatbot."""
+
+    class Tone(models.TextChoices):
+        FRIENDLY = "friendly", "Friendly"
+        PROFESSIONAL = "professional", "Professional"
+        CONCISE = "concise", "Concise"
+
+    account = models.OneToOneField(ClientAccount, on_delete=models.CASCADE, related_name="bot_settings")
+    name = models.CharField(max_length=100, blank=True, default="")
+    greeting = models.TextField(blank=True, default=DEFAULT_BOT_GREETING)
+    tone = models.CharField(max_length=20, choices=Tone.choices, default=Tone.FRIENDLY)
+    custom_instructions = models.TextField(blank=True, default="")
+    fallback_message = models.TextField(blank=True, default=DEFAULT_BOT_FALLBACK)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "bot settings"
+        verbose_name_plural = "bot settings"
+
+    def __str__(self):
+        return f"Settings for {self.account.company_name} ({self.display_name})"
+
+    @property
+    def display_name(self):
+        val = (self.name or "").strip()
+        if val:
+            return val
+        if self.account_id and self.account.company_name:
+            return f"{self.account.company_name} Assistant"
+        return "Support Assistant"
+
+    @property
+    def active_greeting(self):
+        return (self.greeting or "").strip() or DEFAULT_BOT_GREETING
+
+    @property
+    def active_fallback(self):
+        return (self.fallback_message or "").strip() or DEFAULT_BOT_FALLBACK
+
+    @classmethod
+    def get_for_account(cls, account):
+        obj = cls.objects.filter(account=account).first()
+        if obj is None:
+            default_name = f"{account.company_name} Assistant" if account.company_name else "Support Assistant"
+            obj, _ = cls.objects.get_or_create(
+                account=account,
+                defaults={
+                    "name": default_name,
+                    "greeting": DEFAULT_BOT_GREETING,
+                    "tone": cls.Tone.FRIENDLY,
+                    "custom_instructions": "",
+                    "fallback_message": DEFAULT_BOT_FALLBACK,
+                },
+            )
+        return obj
+
