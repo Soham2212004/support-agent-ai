@@ -223,4 +223,22 @@ class BotSettingsAdmin(admin.ModelAdmin):
         ("Instructions & Fallback", {"fields": ("custom_instructions", "fallback_message")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = (
+        "account",
+        "name",
+        "tone",
+        "greeting",
+        "custom_instructions",
+        "fallback_message",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
