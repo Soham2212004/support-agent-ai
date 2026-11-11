@@ -2,13 +2,14 @@
 import logging
 import os
 import re
+from types import SimpleNamespace
 
 from django.conf import settings
 from pgvector.django import CosineDistance
 
 from . import llm
 from .embeddings import embed_query
-from .models import BotSettings, DEFAULT_BOT_FALLBACK, DocumentChunk
+from .models import BotSettings, DEFAULT_BOT_FALLBACK, DocumentChunk, PublishedBotChunk
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +41,18 @@ def is_smalltalk(text):
     return any(re.match(pat, clean) for pat in SMALLTALK_PATTERNS)
 
 
-def retrieve(account, document, question):
+def retrieve(account, document, question, published_version=None):
     """The best-matching passages of this client's document, most similar first."""
-    vector = embed_query(question)
-    rows = (
-        DocumentChunk.objects.filter(account=account, document=document, embedding_model=settings.EMBEDDING_MODEL)
-        .annotate(distance=CosineDistance("embedding", vector))
-        .order_by("distance")
-        .defer("embedding")[: settings.SEARCH_TOP_K]
-    )
+    embedding_model = published_version.embedding_model if published_version else settings.EMBEDDING_MODEL
+    vector = embed_query(question, model_name=embedding_model)
+    if published_version:
+        rows = PublishedBotChunk.objects.filter(version=published_version, embedding_model=embedding_model)
+    else:
+        rows = DocumentChunk.objects.filter(
+            account=account, document=document, embedding_model=embedding_model
+        )
+    rows = rows.annotate(distance=CosineDistance("embedding", vector)).order_by("distance").defer("embedding")
+    rows = rows[: settings.SEARCH_TOP_K]
     passages = []
     for number, chunk in enumerate(rows, start=1):
         label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
@@ -135,9 +139,18 @@ def extract_citations(answer, passages):
     return citations
 
 
-def stream_answer(account, document, history, question, provider):
+def stream_answer(account, document, history, question, provider, published_version=None):
     """Yield {"type": "token", "text": ...} pieces, then one {"type": "final", ...} event."""
-    bot_settings = BotSettings.get_for_account(account)
+    if published_version:
+        snapshot = published_version.settings_snapshot
+        bot_settings = SimpleNamespace(
+            display_name=snapshot["display_name"],
+            tone=snapshot["tone"],
+            custom_instructions=snapshot["custom_instructions"],
+            active_fallback=snapshot["fallback_message"],
+        )
+    else:
+        bot_settings = BotSettings.get_for_account(account)
 
     def _fallback(reason, tokens_in=0, tokens_out=0):
         return {
@@ -150,7 +163,7 @@ def stream_answer(account, document, history, question, provider):
             "tokens_out": tokens_out,
         }
 
-    passages = retrieve(account, document, question)
+    passages = retrieve(account, document, question, published_version=published_version)
 
     # Weak evidence: check if this is small-talk/greeting, or fall back immediately
     min_score = float(os.environ.get("RAG_MIN_SIMILARITY", "0.75"))
@@ -238,4 +251,3 @@ def stream_answer(account, document, history, question, provider):
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
     }
-

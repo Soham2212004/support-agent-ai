@@ -13,7 +13,8 @@ python manage.py create_default_admin
 # Daily clean-up: delete client requests rejected more than ~6 months ago
 (
   while true; do
-    python manage.py purge_rejected_requests || true
+    python manage.py purge_rejected_requests || echo "Rejected-request cleanup failed" >&2
+    python manage.py purge_public_chat_data || echo "Public-chat retention cleanup failed" >&2
     sleep 86400
   done
 ) &

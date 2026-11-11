@@ -4,6 +4,7 @@ import { ApiError, api, clearToken, getToken } from "../api.js";
 import DocumentUpload from "../components/DocumentUpload.jsx";
 import Chat from "../components/Chat.jsx";
 import BotSettings from "../components/BotSettings.jsx";
+import Publishing from "../components/Publishing.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -115,6 +116,14 @@ export default function Dashboard() {
         >
           Bot Settings
         </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "publish" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("publish")}
+          aria-current={activeTab === "publish" ? "page" : undefined}
+        >
+          Publish &amp; API
+        </button>
       </nav>
 
       {activeTab === "chat" ? (
@@ -123,7 +132,11 @@ export default function Dashboard() {
           <Chat settingsRevision={settingsRevision} />
         </>
       ) : (
-        <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />
+        activeTab === "settings" ? (
+          <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />
+        ) : (
+          <Publishing />
+        )
       )}
     </main>
   );

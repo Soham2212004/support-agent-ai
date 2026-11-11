@@ -2,7 +2,7 @@ import { ApiError, getToken } from "./api.js";
 
 function headers() {
   const h = { "Content-Type": "application/json" };
-  if (getToken()) h.Authorization = `Bearer ${getToken()}`;
+  if (getToken()) h.Authorization = "Bearer " + getToken();
   return h;
 }
 

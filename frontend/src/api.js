@@ -36,7 +36,7 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   const isForm = body instanceof FormData;
   const headers = {};
   if (!isForm) headers["Content-Type"] = "application/json";
-  if (auth && getToken()) headers.Authorization = `Bearer ${getToken()}`;
+  if (auth && getToken()) headers.Authorization = "Bearer " + getToken();
 
   let response;
   try {
@@ -80,4 +80,17 @@ export const api = {
   searchDocument: (query) => request("/document/search/", { method: "POST", body: { query }, auth: true }),
   getBotSettings: () => request("/bot-settings/", { auth: true }),
   saveBotSettings: (settings) => request("/bot-settings/", { method: "POST", body: settings, auth: true }),
+  getPublication: () => request("/publication/", { auth: true }),
+  publishBot: () => request("/publication/publish/", { method: "POST", body: {}, auth: true }),
+  unpublishBot: () => request("/publication/unpublish/", { method: "POST", body: {}, auth: true }),
+  restoreVersion: (id) =>
+    request(`/publication/versions/${id}/restore/`, { method: "POST", body: {}, auth: true }),
+  getApiKey: () => request("/publication/api-key/", { auth: true }),
+  rotateApiKey: () => request("/publication/api-key/", { method: "POST", body: {}, auth: true }),
+  revokeApiKeys: () => request("/publication/api-key/", { method: "DELETE", auth: true }),
+  getAllowedWebsites: () => request("/publication/websites/", { auth: true }),
+  addAllowedWebsite: (origin) =>
+    request("/publication/websites/", { method: "POST", body: { origin }, auth: true }),
+  removeAllowedWebsite: (origin) =>
+    request("/publication/websites/", { method: "DELETE", body: { origin }, auth: true }),
 };
