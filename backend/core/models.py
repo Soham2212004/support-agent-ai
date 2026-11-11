@@ -1,4 +1,5 @@
 from datetime import timedelta
+import uuid
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models, transaction
@@ -277,3 +278,141 @@ class BotSettings(models.Model):
             )
         return obj
 
+
+class PublishedBotVersion(models.Model):
+    """Immutable chatbot configuration and indexed document captured at publish time."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="published_versions")
+    version = models.PositiveIntegerField()
+    document_name = models.CharField(max_length=255)
+    document_hash = models.CharField(max_length=64)
+    document_text = models.TextField()
+    document_sections = models.JSONField(default=list)
+    document_metadata = models.JSONField(default=dict)
+    settings_snapshot = models.JSONField(default=dict)
+    embedding_model = models.CharField(max_length=100)
+    is_published = models.BooleanField(default=True)
+    published_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [
+            models.UniqueConstraint(fields=["account", "version"], name="unique_published_bot_version"),
+        ]
+
+    def __str__(self):
+        return f"{self.account.company_name} bot v{self.version}"
+
+
+class PublishedBotChunk(models.Model):
+    """An immutable copy of a document chunk and its vector for a published bot version."""
+
+    version = models.ForeignKey(PublishedBotVersion, on_delete=models.CASCADE, related_name="chunks")
+    ordinal = models.PositiveIntegerField()
+    section_label = models.CharField(max_length=200, blank=True)
+    page_number = models.PositiveIntegerField(null=True, blank=True)
+    text = models.TextField()
+    embedding = VectorField(dimensions=None)
+    embedding_model = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["ordinal"]
+        constraints = [
+            models.UniqueConstraint(fields=["version", "ordinal"], name="unique_published_chunk_ordinal"),
+        ]
+
+
+class ClientApiKey(models.Model):
+    """A hashed client secret; plaintext is returned only when first created."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="api_keys")
+    key_hash = models.CharField(max_length=64, unique=True)
+    prefix = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def usable(self):
+        now = timezone.now()
+        return self.revoked_at is None and (self.expires_at is None or self.expires_at > now)
+
+
+class AllowedWebsite(models.Model):
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="allowed_websites")
+    origin = models.CharField(max_length=300)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["origin"]
+        constraints = [
+            models.UniqueConstraint(fields=["account", "origin"], name="unique_allowed_website_origin"),
+        ]
+
+    def __str__(self):
+        return self.origin
+
+
+class PublicChatSession(models.Model):
+    """One visitor identity and transcript, retained for the configured retention period."""
+
+    token_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="public_chat_sessions")
+    version = models.ForeignKey(PublishedBotVersion, on_delete=models.PROTECT, related_name="visitor_sessions")
+    visitor_name = models.CharField(max_length=150)
+    visitor_email = models.EmailField()
+    origin = models.CharField(max_length=300)
+    expires_at = models.DateTimeField()
+    is_generating = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["created_at"], name="public_session_created_idx")]
+
+
+class PublicChatMessage(models.Model):
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    session = models.ForeignKey(PublicChatSession, on_delete=models.CASCADE, related_name="messages")
+    seq = models.PositiveIntegerField()
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField(blank=True)
+    citations = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=10, default="complete")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["seq"]
+        constraints = [
+            models.UniqueConstraint(fields=["session", "seq"], name="unique_public_message_seq"),
+        ]
+
+
+class PublicMonthlyUsage(models.Model):
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="public_monthly_usage")
+    month = models.DateField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["account", "month"], name="unique_public_monthly_usage"),
+        ]
+
+
+class PublicRateLimitBucket(models.Model):
+    scope = models.CharField(max_length=30)
+    key = models.CharField(max_length=100)
+    minute = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["scope", "key", "minute"], name="unique_public_rate_bucket"),
+        ]

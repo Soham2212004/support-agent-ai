@@ -33,6 +33,27 @@ docker compose down           # stop everything (data is kept)
 docker compose down -v        # stop and DELETE the database volume
 ```
 
+## Publish a chatbot on your website
+
+After your account is approved, upload and index a document, configure the bot, then open **Dashboard → Publish & API**.
+Publishing creates an immutable version of the bot settings, document text, and retrieval vectors. Editing the draft
+does not affect the live version. Restoring a historical version replaces the draft; publish it again to make it live.
+
+Create an API key in the dashboard and copy it immediately; the plaintext key is only shown once. Replacing a key
+keeps the previous one valid for 24 hours, while revoking keys disables them immediately. Add each exact website
+origin to **Allowed websites** before integrating the chat.
+
+The public API flow is:
+
+1. Your server calls `POST /api/public/token/` with `X-API-Key`, the allowlisted `origin`, and the visitor's name/email.
+2. Your server returns the 15-minute visitor token to that visitor's browser.
+3. The browser sends `POST /api/public/chat/` with the visitor token and reads the SSE answer and source citations.
+
+Never put a production API key in browser code. The dashboard's **API documentation** has copyable examples and
+**Try the sample chat** is a test-only playground. The public API allows 1,000 messages per client per month,
+10 visitor-token requests per API key per minute, and 10 messages per visitor token per minute. Visitor transcripts
+are automatically purged after 90 days by the backend's daily cleanup task.
+
 ## Project layout
 
 ```

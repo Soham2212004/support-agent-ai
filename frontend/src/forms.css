@@ -396,6 +396,21 @@ button.button {
   background: var(--paper);
 }
 
+.publish-site-list .link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b91c1c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.publish-site-list .link-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .search-results p {
   margin: 0.5rem 0 0;
   font-size: 0.95rem;
@@ -747,5 +762,245 @@ button.button {
   .settings-tone-grid {
     grid-template-columns: 1fr;
   }
+
+  .dash-tabs {
+    flex-wrap: wrap;
+  }
 }
 
+/* ---------- Publishing and public chat API ---------- */
+.publishing-card {
+  margin-bottom: 2rem;
+}
+
+.publish-section {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.publish-section h3 {
+  margin-bottom: 0.4rem;
+  font-size: 1.1rem;
+}
+
+.publish-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.publish-section-heading p,
+.publish-version-list p {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.publish-badge {
+  display: inline-block;
+  margin-left: 0.65rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.publish-badge-live {
+  border-color: #a8d8b5;
+  background: #e3f4e8;
+  color: #14532d;
+}
+
+.publish-version-list,
+.publish-site-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.publish-version-list li,
+.publish-site-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper);
+}
+
+.key-status {
+  margin-top: 1rem;
+}
+
+.key-status code,
+.publish-site-list code,
+.public-demo code,
+.api-docs code {
+  overflow-wrap: anywhere;
+}
+
+.one-time-key {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--signal);
+  border-radius: 0.75rem;
+  background: var(--signal-soft);
+}
+
+.one-time-key code {
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+.publish-links,
+.doc-back {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  color: var(--cobalt);
+  font-weight: 600;
+}
+
+.api-docs {
+  max-width: 58rem;
+}
+
+.eyebrow {
+  margin-bottom: 0.5rem;
+  color: var(--cobalt);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.doc-section {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--white);
+}
+
+.doc-section h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.3rem;
+}
+
+.doc-section p + p {
+  margin-top: 0.75rem;
+}
+
+.code-example {
+  position: relative;
+  margin-top: 1rem;
+}
+
+.code-example > .button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.code-example pre {
+  overflow: auto;
+  padding: 1rem;
+  padding-top: 3rem;
+  border-radius: 0.75rem;
+  background: #17202a;
+  color: #f2f4f1;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.doc-bullets {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding-left: 1.25rem;
+  list-style: disc;
+  color: var(--ink-soft);
+}
+
+.public-demo {
+  max-width: 58rem;
+}
+
+.demo-warning {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--signal);
+  border-radius: 0.7rem;
+  background: var(--signal-soft);
+  font-size: 0.9rem;
+}
+
+.demo-chat {
+  margin-top: 1.5rem;
+}
+
+.demo-messages {
+  display: grid;
+  gap: 0.8rem;
+  max-height: 34rem;
+  overflow: auto;
+  margin-top: 1.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-message {
+  max-width: 90%;
+  padding: 0.8rem 1rem;
+  border-radius: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.demo-message p {
+  margin-top: 0.3rem;
+  white-space: pre-wrap;
+}
+
+.demo-message-user {
+  justify-self: end;
+  background: #e9edff;
+}
+
+.demo-message-assistant {
+  justify-self: start;
+  background: var(--paper);
+}
+
+.demo-citations {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.demo-citations li {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.demo-citations strong {
+  color: var(--ink);
+}
+
+.api-docs .doc-back a,
+.public-demo .doc-back a {
+  color: var(--cobalt);
+}
