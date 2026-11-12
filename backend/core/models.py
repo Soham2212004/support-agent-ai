@@ -227,12 +227,27 @@ class BotSettings(models.Model):
         PROFESSIONAL = "professional", "Professional"
         CONCISE = "concise", "Concise"
 
+    class AnswerLength(models.TextChoices):
+        SHORT = "short", "Short"
+        STANDARD = "standard", "Standard"
+        DETAILED = "detailed", "Detailed"
+
     account = models.OneToOneField(ClientAccount, on_delete=models.CASCADE, related_name="bot_settings")
     name = models.CharField(max_length=100, blank=True, default="")
     greeting = models.TextField(blank=True, default=DEFAULT_BOT_GREETING)
     tone = models.CharField(max_length=20, choices=Tone.choices, default=Tone.FRIENDLY)
     custom_instructions = models.TextField(blank=True, default="")
     fallback_message = models.TextField(blank=True, default=DEFAULT_BOT_FALLBACK)
+
+    # answer behavior
+    similarity_threshold = models.FloatField(default=0.75)
+    show_citations = models.BooleanField(default=True)
+    max_answer_length = models.CharField(max_length=20, choices=AnswerLength.choices, default=AnswerLength.STANDARD)
+
+    # conversation experience
+    starter_questions = models.JSONField(default=list, blank=True)
+    escalation_email = models.EmailField(blank=True, default="")
+    avatar_url = models.URLField(max_length=500, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -259,7 +274,10 @@ class BotSettings(models.Model):
 
     @property
     def active_fallback(self):
-        return (self.fallback_message or "").strip() or DEFAULT_BOT_FALLBACK
+        base = (self.fallback_message or "").strip() or DEFAULT_BOT_FALLBACK
+        if self.escalation_email:
+            base += f" You can also reach us directly at {self.escalation_email}."
+        return base
 
     @classmethod
     def get_for_account(cls, account):

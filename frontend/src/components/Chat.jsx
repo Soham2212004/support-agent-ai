@@ -2,6 +2,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, clearToken } from "../api.js";
 import { getChatState, sendChatMessage } from "../chatApi.js";
 
+function BotAvatar({ url, name, small }) {
+  const [broken, setBroken] = useState(false);
+  const className = small ? "bot-avatar bot-avatar-small" : "bot-avatar";
+
+  if (url && !broken) {
+    return <img className={className} src={url} alt="" onError={() => setBroken(true)} />;
+  }
+  const initial = (name || "A").trim().charAt(0).toUpperCase();
+  return (
+    <span className={`${className} bot-avatar-fallback`} aria-hidden="true">
+      {initial}
+    </span>
+  );
+}
+
 export default function Chat({ settingsRevision = 0 }) {
   const [info, setInfo] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -148,7 +163,10 @@ export default function Chat({ settingsRevision = 0 }) {
     <section className="chat-card" aria-labelledby="chat-title">
       <div className="chat-head">
         <div>
-          <h2 id="chat-title">Chat with {botName}</h2>
+          <h2 id="chat-title">
+            <BotAvatar url={info?.bot_settings?.avatar_url} name={botName} />
+            Chat with {botName}
+          </h2>
           <p className="upload-help">
             Ask a question and the answer comes directly from your document, guided by your bot settings.
           </p>
@@ -187,6 +205,15 @@ export default function Chat({ settingsRevision = 0 }) {
                     <p>{greeting}</p>
                   </div>
                 )}
+                {info?.bot_settings?.starter_questions?.length > 0 && (
+                  <div className="chat-starters">
+                    {info.bot_settings.starter_questions.map((q) => (
+                      <button key={q} type="button" className="chat-starter-btn" onClick={() => setInput(q)}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <p className="chat-empty">
                   Try saying "Hello", or ask a question about your uploaded document.
                 </p>
@@ -199,6 +226,7 @@ export default function Chat({ settingsRevision = 0 }) {
               >
                 {m.role === "assistant" && (
                   <div className="chat-author-label">
+                    <BotAvatar url={info?.bot_settings?.avatar_url} name={botName} small />
                     <strong>{botName}</strong>
                   </div>
                 )}

@@ -1,6 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
+function BotAvatar({ url, name, small }) {
+  const [broken, setBroken] = useState(false);
+  const className = small ? "bot-avatar bot-avatar-small" : "bot-avatar";
+
+  if (url && !broken) {
+    return <img className={className} src={url} alt="" onError={() => setBroken(true)} />;
+  }
+  const initial = (name || "A").trim().charAt(0).toUpperCase();
+  return (
+    <span className={`${className} bot-avatar-fallback`} aria-hidden="true">
+      {initial}
+    </span>
+  );
+}
+
 async function responseData(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || "The request failed.");
@@ -155,7 +170,10 @@ export default function PublicChatDemo() {
         <section className="settings-card demo-chat" aria-label="Public chat playground">
           <div className="publish-section-heading">
             <div>
-              <h2>{bot?.name}</h2>
+              <h2>
+                <BotAvatar url={bot?.avatar} name={bot?.name} />
+                {bot?.name}
+              </h2>
               <p>Published version {bot?.version} · visitor token expires in 15 minutes</p>
             </div>
             <button type="button" className="button button-ghost button-small" disabled={busy} onClick={() => setVisitorToken("")}>
@@ -165,6 +183,7 @@ export default function PublicChatDemo() {
           <ol className="demo-messages" aria-live="polite">
             {messages.map((message, index) => (
               <li key={`${index}-${message.role}`} className={`demo-message demo-message-${message.role}`}>
+                {message.role === "assistant" && <BotAvatar url={bot?.avatar} name={bot?.name} small />}
                 <strong>{message.role === "user" ? name || "You" : bot?.name}</strong>
                 <p>{message.content || (busy && message.role === "assistant" ? "…" : "")}</p>
                 {message.citations?.length > 0 && (
@@ -180,6 +199,15 @@ export default function PublicChatDemo() {
               </li>
             ))}
           </ol>
+          {messages.length === 1 && bot?.starter_questions?.length > 0 && (
+            <div className="chat-starters">
+              {bot.starter_questions.map((q) => (
+                <button key={q} type="button" className="chat-starter-btn" onClick={() => setContent(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <form className="search-form" onSubmit={send}>
             <input value={content} maxLength={1000} onChange={(event) => setContent(event.target.value)} placeholder="Ask a question about the published bot…" aria-label="Message" disabled={busy} />

@@ -96,6 +96,8 @@ def state(request):
                 "tone": settings.tone,
                 "custom_instructions": settings.custom_instructions,
                 "fallback_message": settings.active_fallback,
+                "starter_questions": settings.starter_questions,
+                "avatar_url": settings.avatar_url,
             },
         }
     )

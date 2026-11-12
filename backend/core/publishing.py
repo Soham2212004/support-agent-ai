@@ -96,6 +96,12 @@ def publish(request):
                 "tone": bot_settings.tone,
                 "custom_instructions": bot_settings.custom_instructions,
                 "fallback_message": bot_settings.active_fallback,
+                "similarity_threshold": bot_settings.similarity_threshold,
+                "show_citations": bot_settings.show_citations,
+                "max_answer_length": bot_settings.max_answer_length,
+                "starter_questions": bot_settings.starter_questions,
+                "avatar_url": bot_settings.avatar_url,
+                "escalation_email": bot_settings.escalation_email,
             },
             embedding_model=chunks[0].embedding_model,
         )
@@ -192,6 +198,12 @@ def restore_version(request, version_id):
         bot_settings.tone = settings_snapshot["tone"]
         bot_settings.custom_instructions = settings_snapshot["custom_instructions"]
         bot_settings.fallback_message = settings_snapshot["fallback_message"]
+        bot_settings.similarity_threshold = settings_snapshot.get("similarity_threshold", 0.75)
+        bot_settings.show_citations = settings_snapshot.get("show_citations", True)
+        bot_settings.max_answer_length = settings_snapshot.get("max_answer_length", BotSettings.AnswerLength.STANDARD)
+        bot_settings.starter_questions = settings_snapshot.get("starter_questions", [])
+        bot_settings.avatar_url = settings_snapshot.get("avatar_url", "")
+        bot_settings.escalation_email = settings_snapshot.get("escalation_email", "")
         bot_settings.save()
 
     return JsonResponse(

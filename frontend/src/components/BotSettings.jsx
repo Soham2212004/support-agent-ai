@@ -26,6 +26,12 @@ export default function BotSettings({ onSave }) {
     tone: "friendly",
     custom_instructions: "",
     fallback_message: "",
+    similarity_threshold: 0.75,
+    show_citations: true,
+    max_answer_length: "standard",
+    starter_questions: ["", "", "", ""],
+    escalation_email: "",
+    avatar_url: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +50,12 @@ export default function BotSettings({ onSave }) {
         tone: data.tone || "friendly",
         custom_instructions: data.custom_instructions || "",
         fallback_message: data.fallback_message || "",
+        similarity_threshold: data.similarity_threshold ?? 0.75,
+        show_citations: data.show_citations ?? true,
+        max_answer_length: data.max_answer_length || "standard",
+        starter_questions: [...(data.starter_questions || []), "", "", "", ""].slice(0, 4),
+        escalation_email: data.escalation_email || "",
+        avatar_url: data.avatar_url || "",
       });
     } catch (err) {
       setError(err.message || "Failed to load bot settings.");
@@ -76,7 +88,11 @@ export default function BotSettings({ onSave }) {
     setSaving(true);
 
     try {
-      const res = await api.saveBotSettings(formData);
+      const payload = {
+        ...formData,
+        starter_questions: formData.starter_questions.map((q) => q.trim()).filter(Boolean),
+      };
+      const res = await api.saveBotSettings(payload);
       setSuccess("Bot settings saved! Your test chat is now using these updated settings.");
       if (res?.settings) {
         setFormData({
@@ -85,6 +101,12 @@ export default function BotSettings({ onSave }) {
           tone: res.settings.tone || "friendly",
           custom_instructions: res.settings.custom_instructions || "",
           fallback_message: res.settings.fallback_message || "",
+          similarity_threshold: res.settings.similarity_threshold ?? 0.75,
+          show_citations: res.settings.show_citations ?? true,
+          max_answer_length: res.settings.max_answer_length || "standard",
+          starter_questions: [...(res.settings.starter_questions || []), "", "", "", ""].slice(0, 4),
+          escalation_email: res.settings.escalation_email || "",
+          avatar_url: res.settings.avatar_url || "",
         });
       }
       onSave?.();
@@ -199,6 +221,64 @@ export default function BotSettings({ onSave }) {
           {fieldErrors.tone && <p className="field-error">{fieldErrors.tone}</p>}
         </div>
 
+        {/* Answer behavior */}
+        <div className="field">
+          <div className="field-label-row">
+            <label htmlFor="bot-similarity">Match strictness</label>
+            <span className="field-counter">{formData.similarity_threshold.toFixed(2)}</span>
+          </div>
+          <p className="field-desc">
+            Higher = stricter matches, fewer but more confident answers. Lower = more answers, more risk of a weak match.
+          </p>
+          <input
+            id="bot-similarity"
+            type="range"
+            min="0.3"
+            max="0.95"
+            step="0.05"
+            value={formData.similarity_threshold}
+            onChange={(e) => handleChange("similarity_threshold", parseFloat(e.target.value))}
+            disabled={saving}
+          />
+          {fieldErrors.similarity_threshold && <p className="field-error">{fieldErrors.similarity_threshold}</p>}
+        </div>
+
+        <div className="field">
+          <label className="field-checkbox">
+            <input
+              type="checkbox"
+              checked={formData.show_citations}
+              onChange={(e) => handleChange("show_citations", e.target.checked)}
+              disabled={saving}
+            />
+            Show source citations (e.g. [1]) to visitors
+          </label>
+        </div>
+
+        <div className="field">
+          <label>Answer length</label>
+          <div className="settings-tone-grid" role="radiogroup" aria-label="Answer length">
+            {[
+              { id: "short", label: "Short", desc: "1-2 sentences, no matter the tone." },
+              { id: "standard", label: "Standard", desc: "Clear and reasonably concise." },
+              { id: "detailed", label: "Detailed", desc: "Thorough answers when helpful." },
+            ].map((opt) => (
+              <label key={opt.id} className={`settings-tone-option ${formData.max_answer_length === opt.id ? "selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="bot-max-answer-length"
+                  value={opt.id}
+                  checked={formData.max_answer_length === opt.id}
+                  onChange={() => handleChange("max_answer_length", opt.id)}
+                  disabled={saving}
+                />
+                <span className="settings-tone-title">{opt.label}</span>
+                <span className="settings-tone-desc">{opt.desc}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
         {/* Custom Instructions */}
         <div className="field">
           <div className="field-label-row">
@@ -243,6 +323,60 @@ export default function BotSettings({ onSave }) {
           {fieldErrors.fallback_message && (
             <p className="field-error">{fieldErrors.fallback_message}</p>
           )}
+        </div>
+
+        {/* Starter questions */}
+        <div className="field">
+          <label>Suggested starter questions</label>
+          <p className="field-desc">Up to 4 clickable prompts shown when a visitor opens the chat. Leave blank to skip.</p>
+          {formData.starter_questions.map((q, i) => (
+            <input
+              key={i}
+              type="text"
+              maxLength={150}
+              placeholder={`Starter question ${i + 1}`}
+              value={q}
+              onChange={(e) => {
+                const next = [...formData.starter_questions];
+                next[i] = e.target.value;
+                handleChange("starter_questions", next);
+              }}
+              disabled={saving}
+              style={{ marginTop: i > 0 ? "0.5rem" : 0 }}
+            />
+          ))}
+          {fieldErrors.starter_questions && <p className="field-error">{fieldErrors.starter_questions}</p>}
+        </div>
+
+        {/* Escalation email */}
+        <div className="field">
+          <label htmlFor="bot-escalation-email">Escalation contact email</label>
+          <p className="field-desc">Added to the fallback message so visitors know where to go when the bot can't help.</p>
+          <input
+            id="bot-escalation-email"
+            type="email"
+            placeholder="e.g. support@yourcompany.com"
+            value={formData.escalation_email}
+            onChange={(e) => handleChange("escalation_email", e.target.value)}
+            disabled={saving}
+          />
+          {fieldErrors.escalation_email && <p className="field-error">{fieldErrors.escalation_email}</p>}
+        </div>
+
+        {/* Avatar */}
+        <div className="field">
+          <label htmlFor="bot-avatar-url">Bot avatar URL</label>
+          <p className="field-desc">A small image shown next to your bot's name in the chat.</p>
+          <input
+            id="bot-avatar-url"
+            type="url"
+            placeholder="https://example.com/avatar.png"
+            value={formData.avatar_url}
+            onChange={(e) => handleChange("avatar_url", e.target.value)}
+            disabled={saving}
+          />
+          {fieldErrors.avatar_url && <p className="field-error">{fieldErrors.avatar_url}</p>}
+          {formData.avatar_url && <img src={formData.avatar_url} alt="" className="bot-avatar-preview" />}
         </div>
 
         <div className="settings-actions">
