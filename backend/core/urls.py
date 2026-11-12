@@ -1,17 +1,19 @@
 from django.urls import path
 
-from . import api, bot_settings, chat, documents, public_api, publishing
+from . import analytics, api, bot_settings, chat, documents, public_api, publishing
 
 urlpatterns = [
     path("register/", api.register, name="api-register"),
     path("login/", api.login, name="api-login"),
     path("me/", api.me, name="api-me"),
+    path("analytics/", analytics.analytics, name="api-analytics"),
     path("document/", documents.document, name="api-document"),
     path("document/reindex/", documents.reindex, name="api-document-reindex"),
     path("document/search/", documents.search, name="api-document-search"),
     path("chat/", chat.state, name="api-chat"),
     path("chat/messages/", chat.send_message, name="api-chat-message"),
     path("bot-settings/", bot_settings.bot_settings, name="api-bot-settings"),
+    path("bot-settings/widget/", bot_settings.widget_mode, name="api-bot-settings-widget"),
     path("publication/", publishing.publication, name="api-publication"),
     path("publication/publish/", publishing.publish, name="api-publish"),
     path("publication/unpublish/", publishing.unpublish, name="api-unpublish"),

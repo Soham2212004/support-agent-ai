@@ -8,3 +8,4 @@ sentence-transformers>=3.0
 pgvector>=0.3
 
 openai>=1.50
+redis>=5.0

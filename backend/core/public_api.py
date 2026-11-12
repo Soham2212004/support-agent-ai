@@ -276,6 +276,8 @@ def stream_public_reply(session, history, content, provider, reply_seq):
                 role=PublicChatMessage.Role.ASSISTANT,
                 content=event["text"],
                 citations=event["citations"],
+                is_fallback=event["is_fallback"],
+                fallback_reason=event.get("fallback_reason", ""),
             )
             PublicChatSession.objects.filter(pk=session.pk).update(
                 is_generating=False, updated_at=timezone.now()

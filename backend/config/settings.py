@@ -48,6 +48,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.pending_requests",
+                "core.context_processors.purge_health",
             ],
         },
     },
@@ -99,3 +100,9 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "intfloat/multilingual-e5-sm
 CHUNK_SIZE_CHARS = 1200
 CHUNK_OVERLAP_CHARS = 200
 SEARCH_TOP_K = 5
+
+# ---- Rate limiting ----
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+# ---- Public widget ----
+PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "").rstrip("/")

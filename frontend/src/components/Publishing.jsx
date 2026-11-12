@@ -8,6 +8,8 @@ export default function Publishing() {
   const [websites, setWebsites] = useState([]);
   const [origin, setOrigin] = useState("");
   const [oneTimeSecret, setOneTimeSecret] = useState("");
+  const [widgetMode, setWidgetMode] = useState("default");
+  const [widgetBusy, setWidgetBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +26,7 @@ export default function Publishing() {
       setPublication(publicationData);
       setKey(keyData.key);
       setWebsites(websitesData.websites);
+      setWidgetMode(publicationData.widget_mode || "default");
     } catch (err) {
       setError(err.message || "Could not load publishing settings.");
     } finally {
@@ -105,6 +108,34 @@ export default function Publishing() {
     } catch {
       setError("Clipboard access failed. Select and copy the key manually.");
     }
+  }
+
+  async function changeWidgetMode(mode) {
+    if (mode === widgetMode || widgetBusy) return;
+    setWidgetBusy(true);
+    setError("");
+    try {
+      await api.setWidgetMode(mode);
+      setWidgetMode(mode);
+    } catch (err) {
+      setError(err.message || "Could not update the widget mode.");
+    } finally {
+      setWidgetBusy(false);
+    }
+  }
+
+  async function copyWidgetSnippet() {
+    try {
+      await navigator.clipboard.writeText(widgetSnippet());
+      setNotice("Embed snippet copied to clipboard.");
+    } catch {
+      setError("Clipboard access failed. Select and copy the snippet manually.");
+    }
+  }
+
+  function widgetSnippet() {
+    const apiBase = publication?.public_api_base_url || window.location.origin;
+    return `<script src="${apiBase}/widget.js" data-api-key="YOUR_API_KEY" data-api-base="${apiBase}" async></script>`;
   }
 
   if (loading) {
@@ -271,6 +302,63 @@ export default function Publishing() {
           </ul>
         ) : (
           <p className="field-hint">No website origins have been added.</p>
+        )}
+      </div>
+
+// With this:
+      <div className="publish-section">
+        <h3>Widget</h3>
+        <p className="upload-help">
+          Choose how visitors chat with your bot once published. You can switch any time before or after publishing.
+        </p>
+        <div className="settings-tone-grid" role="radiogroup" aria-label="Widget mode">
+          <label className={`settings-tone-option ${widgetMode === "default" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              name="widget-mode"
+              value="default"
+              checked={widgetMode === "default"}
+              onChange={() => changeWidgetMode("default")}
+              disabled={widgetBusy}
+            />
+            <span className="settings-tone-title">Default widget</span>
+            <span className="settings-tone-desc">
+              A ready-made chat bubble you embed with one script tag. No frontend work required.
+            </span>
+          </label>
+          <label className={`settings-tone-option ${widgetMode === "custom" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              name="widget-mode"
+              value="custom"
+              checked={widgetMode === "custom"}
+              onChange={() => changeWidgetMode("custom")}
+              disabled={widgetBusy}
+            />
+            <span className="settings-tone-title">Custom integration</span>
+            <span className="settings-tone-desc">
+              Build your own UI against the public chat API. See the API docs for the token and streaming endpoints.
+            </span>
+          </label>
+        </div>
+
+        {widgetMode === "default" ? (
+          <div className="code-example" style={{ marginTop: "1rem" }}>
+            <button className="button button-small button-ghost" type="button" onClick={copyWidgetSnippet}>
+              Copy
+            </button>
+            <pre><code>{widgetSnippet()}</code></pre>
+          </div>
+        ) : (
+          <p className="field-hint" style={{ marginTop: "0.75rem" }}>
+            Head to <Link to="/api-docs">API documentation</Link> for the token exchange and streaming chat endpoints.
+          </p>
+        )}
+        {widgetMode === "default" && (
+          <p className="field-hint">
+            Replace <code>YOUR_API_KEY</code> with the key from "Secret API key" above, and add this site to Allowed
+            websites below before testing.
+          </p>
         )}
       </div>
 
