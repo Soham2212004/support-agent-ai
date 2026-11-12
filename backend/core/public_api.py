@@ -123,6 +123,8 @@ def visitor_token(request):
                 "name": version.settings_snapshot["display_name"],
                 "greeting": version.settings_snapshot["greeting"],
                 "version": version.version,
+                "avatar": version.settings_snapshot.get("avatar_url", ""),
+                "starter_questions": version.settings_snapshot.get("starter_questions", []),
             },
         },
         status=201,

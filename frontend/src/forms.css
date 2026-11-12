@@ -1004,3 +1004,75 @@ button.button {
 .public-demo .doc-back a {
   color: var(--cobalt);
 }
+
+.field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.field-checkbox input {
+  width: auto;
+}
+
+.bot-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+.bot-avatar-small {
+  width: 1.1em;
+  height: 1.1em;
+  font-size: 0.75em;
+  margin-right: 0.35rem;
+}
+
+.bot-avatar-fallback {
+  background: var(--cobalt);
+  color: var(--white);
+  font-weight: 700;
+  font-size: 0.75em;
+  line-height: 1;
+}
+
+.bot-avatar-preview {
+  margin-top: 0.75rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+
+.chat-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.chat-starter-btn {
+  padding: 0.5rem 0.9rem;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.chat-starter-btn:hover {
+  border-color: var(--cobalt);
+  color: var(--cobalt);
+}

@@ -97,9 +97,11 @@ class ClientDocumentAdmin(admin.ModelAdmin):
 @admin.register(DocumentChunk)
 class DocumentChunkAdmin(admin.ModelAdmin):
     list_display = ("document", "ordinal", "section_label", "page_number", "char_count", "embedding_model")
-    list_filter = ("embedding_model",)
+    list_filter = ("document", "embedding_model")
     search_fields = ("text", "document__original_filename", "account__email")
     list_select_related = ("document",)
+    ordering = ("document__original_filename", "ordinal")
+    list_per_page = 50
 
     fields = (
         "account", "document", "ordinal", "section_label", "page_number", "char_count",
@@ -219,8 +221,10 @@ class BotSettingsAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Client", {"fields": ("account",)}),
-        ("Bot Personality", {"fields": ("name", "tone", "greeting")}),
-        ("Instructions & Fallback", {"fields": ("custom_instructions", "fallback_message")}),
+        ("Bot Personality", {"fields": ("name", "tone", "greeting", "avatar_url")}),
+        ("Instructions & Fallback", {"fields": ("custom_instructions", "fallback_message", "escalation_email")}),
+        ("Answer Behavior", {"fields": ("similarity_threshold", "show_citations", "max_answer_length")}),
+        ("Conversation Experience", {"fields": ("starter_questions",)}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
     readonly_fields = (
@@ -228,12 +232,17 @@ class BotSettingsAdmin(admin.ModelAdmin):
         "name",
         "tone",
         "greeting",
+        "avatar_url",
         "custom_instructions",
         "fallback_message",
+        "escalation_email",
+        "similarity_threshold",
+        "show_citations",
+        "max_answer_length",
+        "starter_questions",
         "created_at",
         "updated_at",
     )
-
     def has_add_permission(self, request):
         return False
 
