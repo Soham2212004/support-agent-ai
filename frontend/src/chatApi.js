@@ -68,3 +68,16 @@ export async function sendChatMessage({ content, conversationId, provider }, on,
     }
   }
 }
+
+export async function sendFeedback(messageId, feedback) {
+  const response = await fetch(`/api/chat/messages/${messageId}/feedback/`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ feedback }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(data.message || "Could not save feedback.", response.status);
+  }
+  return response.json();
+}

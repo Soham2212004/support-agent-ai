@@ -1,6 +1,12 @@
 {% extends "admin/index.html" %}
 
 {% block content %}
+{% if stale_purge_tasks %}
+  <div role="alert" style="margin:0 0 20px;padding:14px 18px;border-radius:8px;background:#fde8e8;border:1px solid #f5b5b5;color:#8f1d1d;font-size:15px;">
+    <strong>Cleanup job{{ stale_purge_tasks|length|pluralize }} not reporting:</strong>
+    {{ stale_purge_tasks|join:", " }}. Check the backend container logs — the retention loop in entrypoint.sh may have stopped.
+  </div>
+{% endif %}
 {% if pending_client_requests %}
   <div role="status" style="margin:0 0 20px;padding:14px 18px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;font-size:15px;">
     <strong>{{ pending_client_requests }} new client request{{ pending_client_requests|pluralize }}</strong>

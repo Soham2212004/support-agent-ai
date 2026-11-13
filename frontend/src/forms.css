@@ -1076,3 +1076,81 @@ button.button {
   border-color: var(--cobalt);
   color: var(--cobalt);
 }
+
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 2rem;
+}
+
+.analytics-stat {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper);
+  text-align: center;
+}
+
+.analytics-stat-value {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--cobalt);
+}
+
+.analytics-stat-label {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.analytics-table {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.analytics-table li {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper);
+}
+
+.analytics-table-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.feedback-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.feedback-btn {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  opacity: 0.55;
+  font-size: 0.95rem;
+}
+
+.feedback-btn:hover {
+  opacity: 1;
+}
+
+.feedback-active {
+  opacity: 1;
+  border-color: var(--line);
+  background: var(--paper);
+}

@@ -171,6 +171,11 @@ class Message(models.Model):
         COMPLETE = "complete", "Complete"
         PARTIAL = "partial", "Partial"
 
+    class Feedback(models.TextChoices):
+        NONE = "none", "No feedback"
+        UP = "up", "Thumbs up"
+        DOWN = "down", "Thumbs down"
+
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     seq = models.PositiveIntegerField()  # 1, 2, 3 ... in the order the messages were sent
     role = models.CharField(max_length=10, choices=Role.choices)
@@ -183,6 +188,7 @@ class Message(models.Model):
     llm_model = models.CharField(max_length=100, blank=True, default="")
     tokens_in = models.PositiveIntegerField(default=0)
     tokens_out = models.PositiveIntegerField(default=0)
+    feedback = models.CharField(max_length=10, choices=Feedback.choices, default=Feedback.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -195,6 +201,52 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.role} #{self.seq}"
+
+
+class HandoffRequest(models.Model):
+    """A visitor's request for a human, tied to a public chat session."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        RESOLVED = "resolved", "Resolved"
+
+    session = models.ForeignKey("PublicChatSession", on_delete=models.CASCADE, related_name="handoff_requests")
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="handoff_requests")
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "handoff request"
+        verbose_name_plural = "handoff requests"
+
+
+class VisitorDataRequest(models.Model):
+    """A GDPR-style export or deletion request, verified by a one-time emailed token."""
+
+    class Kind(models.TextChoices):
+        EXPORT = "export", "Export"
+        DELETE = "delete", "Delete"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending verification"
+        COMPLETED = "completed", "Completed"
+        EXPIRED = "expired", "Expired"
+
+    email = models.EmailField()
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    token_hash = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "visitor data request"
+        verbose_name_plural = "visitor data requests"
 
 
 class ChatUsage(models.Model):
@@ -232,12 +284,17 @@ class BotSettings(models.Model):
         STANDARD = "standard", "Standard"
         DETAILED = "detailed", "Detailed"
 
+    class WidgetMode(models.TextChoices):
+        DEFAULT = "default", "Default widget"
+        CUSTOM = "custom", "Custom integration"
+
     account = models.OneToOneField(ClientAccount, on_delete=models.CASCADE, related_name="bot_settings")
     name = models.CharField(max_length=100, blank=True, default="")
     greeting = models.TextField(blank=True, default=DEFAULT_BOT_GREETING)
     tone = models.CharField(max_length=20, choices=Tone.choices, default=Tone.FRIENDLY)
     custom_instructions = models.TextField(blank=True, default="")
     fallback_message = models.TextField(blank=True, default=DEFAULT_BOT_FALLBACK)
+    widget_mode = models.CharField(max_length=10, choices=WidgetMode.choices, default=WidgetMode.DEFAULT)
 
     # answer behavior
     similarity_threshold = models.FloatField(default=0.75)
@@ -295,7 +352,6 @@ class BotSettings(models.Model):
                 },
             )
         return obj
-
 
 class PublishedBotVersion(models.Model):
     """Immutable chatbot configuration and indexed document captured at publish time."""
@@ -398,12 +454,20 @@ class PublicChatMessage(models.Model):
         USER = "user", "User"
         ASSISTANT = "assistant", "Assistant"
 
+    class Feedback(models.TextChoices):
+        NONE = "none", "No feedback"
+        UP = "up", "Thumbs up"
+        DOWN = "down", "Thumbs down"
+
     session = models.ForeignKey(PublicChatSession, on_delete=models.CASCADE, related_name="messages")
     seq = models.PositiveIntegerField()
     role = models.CharField(max_length=10, choices=Role.choices)
     content = models.TextField(blank=True)
     citations = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=10, default="complete")
+    is_fallback = models.BooleanField(default=False)
+    fallback_reason = models.CharField(max_length=20, blank=True, default="")
+    feedback = models.CharField(max_length=10, choices=Feedback.choices, default=Feedback.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -411,7 +475,6 @@ class PublicChatMessage(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["session", "seq"], name="unique_public_message_seq"),
         ]
-
 
 class PublicMonthlyUsage(models.Model):
     account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="public_monthly_usage")
@@ -434,3 +497,65 @@ class PublicRateLimitBucket(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["scope", "key", "minute"], name="unique_public_rate_bucket"),
         ]
+
+
+class AdminAuditLog(models.Model):
+    """Records every time a staff member opens a sensitive admin list or detail page."""
+
+    class Action(models.TextChoices):
+        VIEW = "view", "Viewed"
+        VIEW_LIST = "view_list", "Viewed list"
+
+    staff_user = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_logs"
+    )
+    model_name = models.CharField(max_length=100)
+    object_id = models.CharField(max_length=50, blank=True, default="")
+    object_repr = models.CharField(max_length=255, blank=True, default="")
+    action = models.CharField(max_length=20, choices=Action.choices)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "admin audit log"
+        verbose_name_plural = "admin audit logs"
+
+    def __str__(self):
+        return f"{self.staff_user} {self.action} {self.model_name} {self.object_id}"
+
+
+class IndexingLog(models.Model):
+    """One row per attempt to (re)index a document, so failures and retries are visible."""
+
+    class Status(models.TextChoices):
+        STARTED = "started", "Started"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    document = models.ForeignKey(ClientDocument, on_delete=models.CASCADE, related_name="indexing_logs")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.STARTED)
+    chunk_count = models.PositiveIntegerField(default=0)
+    error = models.TextField(blank=True, default="")
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "indexing log"
+        verbose_name_plural = "indexing logs"
+
+
+class PurgeHeartbeat(models.Model):
+    """Updated every time a scheduled cleanup command finishes, so a dead loop is visible in admin."""
+
+    task_name = models.CharField(max_length=50, unique=True)
+    last_run_at = models.DateTimeField()
+    last_result = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = "purge heartbeat"
+        verbose_name_plural = "purge heartbeats"
+
+    def __str__(self):
+        return self.task_name

@@ -3,7 +3,48 @@ from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
 from django.utils.html import format_html
 
-from .models import ClientAccount, ClientDocument, DocumentChunk, BotSettings
+from .models import (
+    AdminAuditLog,
+    ClientAccount,
+    ClientDocument,
+    DocumentChunk,
+    BotSettings,
+    HandoffRequest,
+    IndexingLog,
+    PurgeHeartbeat,
+)
+
+
+def _client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+class AuditedViewMixin:
+    """Logs every time a staff member opens the list or a detail page for a sensitive model."""
+
+    def changelist_view(self, request, extra_context=None):
+        AdminAuditLog.objects.create(
+            staff_user=request.user if request.user.is_authenticated else None,
+            model_name=str(self.model._meta.verbose_name),
+            action=AdminAuditLog.Action.VIEW_LIST,
+            ip_address=_client_ip(request),
+        )
+        return super().changelist_view(request, extra_context)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        obj = self.get_object(request, object_id)
+        AdminAuditLog.objects.create(
+            staff_user=request.user if request.user.is_authenticated else None,
+            model_name=str(self.model._meta.verbose_name),
+            object_id=str(object_id),
+            object_repr=str(obj) if obj else "",
+            action=AdminAuditLog.Action.VIEW,
+            ip_address=_client_ip(request),
+        )
+        return super().change_view(request, object_id, form_url, extra_context)
 admin.site.site_header = "Support Agent AI"
 admin.site.site_title = "Support Agent AI Admin"
 admin.site.index_title = "Welcome"
@@ -69,7 +110,7 @@ class ClientAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(ClientDocument)
-class ClientDocumentAdmin(admin.ModelAdmin):
+class ClientDocumentAdmin(AuditedViewMixin, admin.ModelAdmin):
     list_display = (
         "original_filename", "account", "file_type", "size_kb", "word_count", "index_status", "chunk_count",
         "uploaded_at",
@@ -95,7 +136,7 @@ class ClientDocumentAdmin(admin.ModelAdmin):
         return f"{obj.size_bytes / 1024:.0f} KB"
 
 @admin.register(DocumentChunk)
-class DocumentChunkAdmin(admin.ModelAdmin):
+class DocumentChunkAdmin(AuditedViewMixin, admin.ModelAdmin):
     list_display = ("document", "ordinal", "section_label", "page_number", "char_count", "embedding_model")
     list_filter = ("document", "embedding_model")
     search_fields = ("text", "document__original_filename", "account__email")
@@ -251,3 +292,90 @@ class BotSettingsAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(AdminAuditLog)
+class AdminAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "staff_user", "action", "model_name", "object_id", "object_repr", "ip_address")
+    list_filter = ("action", "model_name", "created_at")
+    search_fields = ("staff_user__username", "object_id", "object_repr")
+    date_hierarchy = "created_at"
+    readonly_fields = [f.name for f in AdminAuditLog._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(IndexingLog)
+class IndexingLogAdmin(admin.ModelAdmin):
+    list_display = ("document", "status", "chunk_count", "started_at", "finished_at")
+    list_filter = ("status", "started_at")
+    search_fields = ("document__original_filename", "document__account__email")
+    list_select_related = ("document",)
+    readonly_fields = ("document", "status", "chunk_count", "error", "started_at", "finished_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PurgeHeartbeat)
+class PurgeHeartbeatAdmin(admin.ModelAdmin):
+    list_display = ("task_name", "last_run_at", "status_badge", "last_result")
+    readonly_fields = ("task_name", "last_run_at", "last_result")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Status")
+    def status_badge(self, obj):
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.utils.html import format_html
+
+        stale = timezone.now() - obj.last_run_at > timedelta(hours=25)
+        color, label = ("#b91c1c", "Stale") if stale else ("#15803d", "OK")
+        return format_html('<strong style="color:{}">{}</strong>', color, label)
+    
+    
+    
+@admin.register(HandoffRequest)
+class HandoffRequestAdmin(admin.ModelAdmin):
+    list_display = ("account", "session_visitor", "status", "created_at", "resolved_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("account__email", "session__visitor_name", "session__visitor_email")
+    list_select_related = ("account", "session")
+    actions = ["mark_resolved"]
+
+    fields = ("account", "session", "reason", "status", "created_at", "resolved_at")
+    readonly_fields = ("account", "session", "reason", "created_at", "resolved_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Visitor")
+    def session_visitor(self, obj):
+        return f"{obj.session.visitor_name} ({obj.session.visitor_email})"
+
+    @admin.action(description="Mark selected requests resolved")
+    def mark_resolved(self, request, queryset):
+        from django.utils import timezone
+
+        count = queryset.filter(status=HandoffRequest.Status.OPEN).update(
+            status=HandoffRequest.Status.RESOLVED, resolved_at=timezone.now()
+        )
+        self.message_user(request, f"{count} request(s) marked resolved.", messages.SUCCESS)

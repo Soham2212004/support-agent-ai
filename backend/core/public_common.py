@@ -2,9 +2,12 @@
 import hashlib
 import hmac
 import ipaddress
+import logging
 import re
 from urllib.parse import urlsplit
 
+import redis
+from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import F
 from django.utils import timezone
@@ -13,12 +16,23 @@ from .models import (
     AllowedWebsite,
     ClientApiKey,
     PublicMonthlyUsage,
-    PublicRateLimitBucket,
 )
+
+logger = logging.getLogger(__name__)
 
 MONTHLY_MESSAGE_LIMIT = 1000
 VISITOR_MESSAGE_RATE = 10
 TOKEN_REQUEST_RATE = 10
+RATE_LIMIT_WINDOW_SECONDS = 70  # a little over a minute, so a key always outlives its own window
+
+_redis_client = None
+
+
+def get_redis():
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=1)
+    return _redis_client
 
 
 def normalize_origin(value):
@@ -78,20 +92,23 @@ def origin_is_allowed(account, origin):
 
 
 def reserve_rate_limit(scope, key, limit):
-    """Atomically count one request in the current UTC minute."""
-    now = timezone.now()
-    minute = now.replace(second=0, microsecond=0)
-    try:
-        PublicRateLimitBucket.objects.get_or_create(scope=scope, key=str(key), minute=minute)
-    except IntegrityError:
-        pass
-    return (
-        PublicRateLimitBucket.objects.filter(
-            scope=scope, key=str(key), minute=minute, count__lt=limit
-        ).update(count=F("count") + 1)
-        == 1
-    )
+    """Atomically count one request in the current UTC minute, using Redis INCR with a short TTL.
 
+    Fails open (allows the request) if Redis is unreachable, since availability of the chat
+    matters more than perfect rate-limit enforcement during a Redis outage.
+    """
+    minute = timezone.now().strftime("%Y%m%d%H%M")
+    redis_key = f"ratelimit:{scope}:{key}:{minute}"
+    try:
+        client = get_redis()
+        pipe = client.pipeline()
+        pipe.incr(redis_key, 1)
+        pipe.expire(redis_key, RATE_LIMIT_WINDOW_SECONDS)
+        count, _ = pipe.execute()
+        return count <= limit
+    except redis.RedisError:
+        logger.warning("Redis unavailable for rate limiting (scope=%s); allowing the request.", scope)
+        return True
 
 def current_month():
     return timezone.localdate().replace(day=1)

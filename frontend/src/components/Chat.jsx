@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, clearToken } from "../api.js";
-import { getChatState, sendChatMessage } from "../chatApi.js";
-
+import { getChatState, sendChatMessage, sendFeedback } from "../chatApi.js";
 function BotAvatar({ url, name, small }) {
   const [broken, setBroken] = useState(false);
   const className = small ? "bot-avatar bot-avatar-small" : "bot-avatar";
@@ -145,6 +144,15 @@ export default function Chat({ settingsRevision = 0 }) {
     }
   }
 
+  async function rateFeedback(message, value) {
+    setMessages((list) => list.map((m) => (m.key === message.key ? { ...m, feedback: value } : m)));
+    try {
+      await sendFeedback(message.id, value);
+    } catch {
+      setMessages((list) => list.map((m) => (m.key === message.key ? { ...m, feedback: message.feedback } : m)));
+    }
+  }
+
   function newConversation() {
     abortRef.current?.abort();
     setMessages([]);
@@ -231,6 +239,26 @@ export default function Chat({ settingsRevision = 0 }) {
                   </div>
                 )}
                 <p>{m.content || (m.pending ? "Thinking..." : "")}</p>
+                {m.role === "assistant" && !m.pending && m.id && (
+                  <div className="feedback-row">
+                    <button
+                      type="button"
+                      className={`feedback-btn ${m.feedback === "up" ? "feedback-active" : ""}`}
+                      aria-label="Good answer"
+                      onClick={() => rateFeedback(m, m.feedback === "up" ? "none" : "up")}
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      className={`feedback-btn ${m.feedback === "down" ? "feedback-active" : ""}`}
+                      aria-label="Bad answer"
+                      onClick={() => rateFeedback(m, m.feedback === "down" ? "none" : "down")}
+                    >
+                      👎
+                    </button>
+                  </div>
+                )}
                 {m.citations?.length > 0 && (
                   <ul className="chat-sources" aria-label="Sources">
                     {m.citations.map((c) => (

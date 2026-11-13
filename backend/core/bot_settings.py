@@ -143,3 +143,26 @@ def bot_settings(request):
         )
 
     return error("Method not allowed.", 405)
+
+
+@csrf_exempt
+@client_required(approved_only=True)
+def widget_mode(request):
+    account = request.client_account
+    settings = BotSettings.get_for_account(account)
+
+    if request.method == "GET":
+        return JsonResponse({"widget_mode": settings.widget_mode})
+
+    if request.method == "POST":
+        data = read_json(request)
+        if data is None:
+            return error("Invalid JSON request body.", 400)
+        value = str(data.get("widget_mode", "")).strip().lower()
+        if value not in BotSettings.WidgetMode.values:
+            return error("Please select a valid widget mode.", 400, {"widget_mode": "Choose Default or Custom."})
+        settings.widget_mode = value
+        settings.save(update_fields=["widget_mode", "updated_at"])
+        return JsonResponse({"widget_mode": settings.widget_mode})
+
+    return error("Method not allowed.", 405)

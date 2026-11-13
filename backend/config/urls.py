@@ -2,8 +2,11 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from core import widget
+
 urlpatterns = [
     path("", RedirectView.as_view(url="/admin/", permanent=False)),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
+    path("widget.js", widget.widget_js, name="public-widget-js"),
 ]

@@ -28,6 +28,8 @@ LENGTH_INSTRUCTIONS = {
     BotSettings.AnswerLength.DETAILED: "Feel free to give a thorough, detailed answer when it helps.",
 }
 
+HANDOFF_TRIGGER_FALLBACKS = 2  # consecutive fallbacks in a session before suggesting a human
+
 SMALLTALK_PATTERNS = [
     r"^(hi|hello|hey|heya|howdy|greetings|hola)(\s+(there|everyone|team|bot|assistant|friend))?$",
     r"^good\s+(morning|afternoon|evening|day)$",

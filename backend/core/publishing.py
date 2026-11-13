@@ -10,6 +10,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from django.conf import settings
+
 from .api import client_required, error, read_json
 from .models import (
     AllowedWebsite,
@@ -46,12 +48,16 @@ def publication(request):
     versions = PublishedBotVersion.objects.filter(account=account)[:25]
     usage = PublicMonthlyUsage.objects.filter(account=account, month=current_month()).first()
     document = ClientDocument.objects.filter(account=account).first()
+    bot_settings = BotSettings.get_for_account(account)
+    api_base = settings.PUBLIC_API_BASE_URL or request.build_absolute_uri("/").rstrip("/")
     return JsonResponse(
         {
             "published": serialize_version(active) if active else None,
             "versions": [serialize_version(version) for version in versions],
             "document_ready": bool(document and document.index_status == ClientDocument.IndexStatus.READY),
             "usage": {"used": usage.count if usage else 0, "limit": MONTHLY_MESSAGE_LIMIT},
+            "widget_mode": bot_settings.widget_mode,
+            "public_api_base_url": api_base,
         }
     )
 
@@ -102,6 +108,7 @@ def publish(request):
                 "starter_questions": bot_settings.starter_questions,
                 "avatar_url": bot_settings.avatar_url,
                 "escalation_email": bot_settings.escalation_email,
+                "widget_mode": bot_settings.widget_mode,
             },
             embedding_model=chunks[0].embedding_model,
         )
@@ -204,6 +211,7 @@ def restore_version(request, version_id):
         bot_settings.starter_questions = settings_snapshot.get("starter_questions", [])
         bot_settings.avatar_url = settings_snapshot.get("avatar_url", "")
         bot_settings.escalation_email = settings_snapshot.get("escalation_email", "")
+        bot_settings.widget_mode = settings_snapshot.get("widget_mode", BotSettings.WidgetMode.DEFAULT)
         bot_settings.save()
 
     return JsonResponse(

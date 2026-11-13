@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from . import llm, rag
 from .api import error, read_json
 from .models import (
+    HandoffRequest,
     PublicChatMessage,
     PublicChatSession,
 )
@@ -276,11 +277,21 @@ def stream_public_reply(session, history, content, provider, reply_seq):
                 role=PublicChatMessage.Role.ASSISTANT,
                 content=event["text"],
                 citations=event["citations"],
+                is_fallback=event["is_fallback"],
+                fallback_reason=event.get("fallback_reason", ""),
             )
             PublicChatSession.objects.filter(pk=session.pk).update(
                 is_generating=False, updated_at=timezone.now()
             )
             finished = True
+            recent_fallbacks = session.messages.filter(
+                role=PublicChatMessage.Role.ASSISTANT, is_fallback=True
+            ).order_by("-seq")[:2]
+            suggest_handoff = (
+                event["is_fallback"]
+                and len(recent_fallbacks) >= 2
+                and all(m.is_fallback for m in recent_fallbacks)
+            )
             yield sse(
                 "done",
                 {
@@ -288,6 +299,7 @@ def stream_public_reply(session, history, content, provider, reply_seq):
                     "text": assistant.content,
                     "citations": assistant.citations,
                     "is_fallback": event["is_fallback"],
+                    "suggest_handoff": suggest_handoff,
                     "usage": monthly_usage(session.account),
                 },
             )
@@ -312,3 +324,79 @@ def stream_public_reply(session, history, content, provider, reply_seq):
     if not finished:
         release()
         yield sse("error", {"message": "No answer was produced. Please try again."})
+
+
+@csrf_exempt
+def public_message_feedback(request, message_id):
+    origin = _request_origin(request)
+    if request.method != "POST":
+        return _public_error("Method not allowed.", 405, origin)
+    if origin is None:
+        return _public_error("A valid website Origin header is required.", 403)
+
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return _public_error("A visitor token is required.", 401, origin)
+    try:
+        token_data = signing.loads(
+            authorization[7:].strip(),
+            salt=VISITOR_TOKEN_SALT,
+            max_age=int(VISITOR_TOKEN_LIFETIME.total_seconds()),
+        )
+    except signing.BadSignature:
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+
+    session = PublicChatSession.objects.filter(token_id=token_data.get("session")).first()
+    if session is None or session.expires_at <= timezone.now():
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+
+    data = read_json(request) or {}
+    value = str(data.get("feedback", "")).strip().lower()
+    if value not in (PublicChatMessage.Feedback.UP, PublicChatMessage.Feedback.DOWN, PublicChatMessage.Feedback.NONE):
+        return _public_error("Feedback must be 'up', 'down', or 'none'.", 400, origin)
+
+    updated = PublicChatMessage.objects.filter(
+        pk=message_id, session=session, role=PublicChatMessage.Role.ASSISTANT
+    ).update(feedback=value)
+    if not updated:
+        return _public_error("Message not found.", 404, origin)
+
+    return _cors(JsonResponse({"message": "Feedback saved.", "feedback": value}), origin)
+
+
+
+@csrf_exempt
+def request_handoff(request):
+    origin = _request_origin(request)
+    if request.method != "POST":
+        return _public_error("Method not allowed.", 405, origin)
+    if origin is None:
+        return _public_error("A valid website Origin header is required.", 403)
+
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return _public_error("A visitor token is required.", 401, origin)
+    try:
+        token_data = signing.loads(
+            authorization[7:].strip(),
+            salt=VISITOR_TOKEN_SALT,
+            max_age=int(VISITOR_TOKEN_LIFETIME.total_seconds()),
+        )
+    except signing.BadSignature:
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+
+    session = PublicChatSession.objects.select_related("account").filter(
+        token_id=token_data.get("session")
+    ).first()
+    if session is None or session.expires_at <= timezone.now():
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+
+    data = read_json(request) or {}
+    reason = str(data.get("reason", "")).strip()[:1000]
+
+    existing_open = HandoffRequest.objects.filter(session=session, status=HandoffRequest.Status.OPEN).first()
+    if existing_open:
+        return _cors(JsonResponse({"message": "A human has already been requested for this chat."}), origin)
+
+    HandoffRequest.objects.create(session=session, account=session.account, reason=reason)
+    return _cors(JsonResponse({"message": "A team member will follow up by email."}, status=201), origin)

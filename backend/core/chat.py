@@ -63,8 +63,8 @@ def serialize_message(message):
         "is_fallback": message.is_fallback,
         "provider": message.provider,
         "model": message.llm_model,
+        "feedback": message.feedback,
     }
-
 
 @require_GET
 @client_required(approved_only=True)
@@ -225,3 +225,22 @@ def stream_reply(account, document, conversation, history, content, provider, re
 
     give_up()  # the pipeline ended without a final answer (should not happen)
     yield sse("error", {"message": "No answer was produced. Please try again."})
+
+
+@csrf_exempt
+@require_POST
+@client_required(approved_only=True)
+def message_feedback(request, message_id):
+    account = request.client_account
+    data = read_json(request) or {}
+    value = str(data.get("feedback", "")).strip().lower()
+    if value not in (Message.Feedback.UP, Message.Feedback.DOWN, Message.Feedback.NONE):
+        return error("Feedback must be 'up', 'down', or 'none'.", 400)
+
+    updated = Message.objects.filter(
+        pk=message_id, conversation__account=account, role=Message.Role.ASSISTANT
+    ).update(feedback=value)
+    if not updated:
+        return error("Message not found.", 404)
+
+    return JsonResponse({"message": "Feedback saved.", "feedback": value})

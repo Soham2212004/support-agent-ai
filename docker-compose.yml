@@ -1,6 +1,14 @@
 name: support-agent-ai
 
 services:
+  # ---------- 0. Redis (rate limiting) ----------
+  redis:
+    image: redis:7-alpine
+    container_name: support_agent_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
   # ---------- 1. PostgreSQL (latest) ----------
   db:
     image: pgvector/pgvector:pg18
@@ -19,7 +27,6 @@ services:
       timeout: 5s
       retries: 15
 
-  # ---------- 2. Django admin panel ----------
   backend:
     build: ./backend
     container_name: support_agent_admin
@@ -30,8 +37,27 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     ports:
-      - "8000:8000"
+      - "8001:8000"
+    volumes:
+      - ./storage:/app/storage
+
+  # ---------- 2b. Celery worker (indexing, future background jobs) ----------
+  worker:
+    build: ./backend
+    container_name: support_agent_worker
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info --concurrency=2
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./storage:/app/storage
 
@@ -45,3 +71,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

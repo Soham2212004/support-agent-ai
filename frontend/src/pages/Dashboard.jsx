@@ -5,6 +5,7 @@ import DocumentUpload from "../components/DocumentUpload.jsx";
 import Chat from "../components/Chat.jsx";
 import BotSettings from "../components/BotSettings.jsx";
 import Publishing from "../components/Publishing.jsx";
+import Analytics from "../components/Analytics.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -124,20 +125,25 @@ export default function Dashboard() {
         >
           Publish &amp; API
         </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "analytics" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("analytics")}
+          aria-current={activeTab === "analytics" ? "page" : undefined}
+        >
+          Analytics
+        </button>
       </nav>
 
-      {activeTab === "chat" ? (
+      {activeTab === "chat" && (
         <>
           <DocumentUpload />
           <Chat settingsRevision={settingsRevision} />
         </>
-      ) : (
-        activeTab === "settings" ? (
-          <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />
-        ) : (
-          <Publishing />
-        )
       )}
+      {activeTab === "settings" && <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />}
+      {activeTab === "publish" && <Publishing />}
+      {activeTab === "analytics" && <Analytics />}
     </main>
   );
 }
