@@ -9,6 +9,7 @@ from .models import (
     ClientDocument,
     DocumentChunk,
     BotSettings,
+    HandoffRequest,
     IndexingLog,
     PurgeHeartbeat,
 )
@@ -349,3 +350,32 @@ class PurgeHeartbeatAdmin(admin.ModelAdmin):
         stale = timezone.now() - obj.last_run_at > timedelta(hours=25)
         color, label = ("#b91c1c", "Stale") if stale else ("#15803d", "OK")
         return format_html('<strong style="color:{}">{}</strong>', color, label)
+    
+    
+    
+@admin.register(HandoffRequest)
+class HandoffRequestAdmin(admin.ModelAdmin):
+    list_display = ("account", "session_visitor", "status", "created_at", "resolved_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("account__email", "session__visitor_name", "session__visitor_email")
+    list_select_related = ("account", "session")
+    actions = ["mark_resolved"]
+
+    fields = ("account", "session", "reason", "status", "created_at", "resolved_at")
+    readonly_fields = ("account", "session", "reason", "created_at", "resolved_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Visitor")
+    def session_visitor(self, obj):
+        return f"{obj.session.visitor_name} ({obj.session.visitor_email})"
+
+    @admin.action(description="Mark selected requests resolved")
+    def mark_resolved(self, request, queryset):
+        from django.utils import timezone
+
+        count = queryset.filter(status=HandoffRequest.Status.OPEN).update(
+            status=HandoffRequest.Status.RESOLVED, resolved_at=timezone.now()
+        )
+        self.message_user(request, f"{count} request(s) marked resolved.", messages.SUCCESS)

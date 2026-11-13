@@ -111,5 +111,7 @@ def index_document(document_id):
     finally:
         connection.close()
 def start_indexing(document_id):
-    """Run index_document in the background so the upload request can return straight away."""
-    threading.Thread(target=index_document, args=(document_id,), daemon=True).start()
+    """Queue index_document on a Celery worker so the upload request can return straight away."""
+    from .tasks import index_document_task
+
+    index_document_task.delay(document_id)

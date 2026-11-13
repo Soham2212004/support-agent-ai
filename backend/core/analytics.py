@@ -80,6 +80,35 @@ def analytics(request):
     return _handle(request)
 
 
+def export_csv(request):
+    if request.method != "GET":
+        return JsonResponse({"message": "Method not allowed."}, status=405)
+    return _handle_export(request)
+
+
+@client_required(approved_only=True)
+def _handle_export(request):
+    import csv
+
+    from django.http import HttpResponse
+
+    account = request.client_account
+    cutoff = timezone.now() - timedelta(days=WINDOW_DAYS)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="conversations.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["source", "role", "content", "is_fallback", "fallback_reason", "feedback", "created_at"])
+
+    for m in Message.objects.filter(conversation__account=account, created_at__gte=cutoff).order_by("created_at"):
+        writer.writerow(["test_chat", m.role, m.content, m.is_fallback, m.fallback_reason, m.feedback, m.created_at.isoformat()])
+
+    for m in PublicChatMessage.objects.filter(session__account=account, created_at__gte=cutoff).order_by("created_at"):
+        writer.writerow(["public_chat", m.role, m.content, m.is_fallback, m.fallback_reason, m.feedback, m.created_at.isoformat()])
+
+    return response
+
+
 @client_required(approved_only=True)
 def _handle(request):
     account = request.client_account

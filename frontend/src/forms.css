@@ -1128,3 +1128,29 @@ button.button {
   align-items: center;
   gap: 0.75rem;
 }
+
+.feedback-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.feedback-btn {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  opacity: 0.55;
+  font-size: 0.95rem;
+}
+
+.feedback-btn:hover {
+  opacity: 1;
+}
+
+.feedback-active {
+  opacity: 1;
+  border-color: var(--line);
+  background: var(--paper);
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, getToken } from "../api.js";
 
 export default function Analytics() {
   const [data, setData] = useState(null);
@@ -39,6 +39,24 @@ export default function Analytics() {
     );
   }
 
+  async function exportCsv(e) {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/analytics/export.csv", {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "conversations.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not export CSV.");
+    }
+  }
+
   return (
     <section className="settings-card" aria-labelledby="analytics-title">
       <div className="settings-head">
@@ -46,6 +64,9 @@ export default function Analytics() {
           <h2 id="analytics-title">Analytics</h2>
           <p className="upload-help">Last {data.window_days} days, across your test chat and published bot.</p>
         </div>
+        <a className="button button-small button-ghost" href={`${api.exportAnalyticsCsvUrl()}?auth=1`} onClick={exportCsv}>
+          Export CSV
+        </a>
       </div>
 
       <div className="analytics-grid">

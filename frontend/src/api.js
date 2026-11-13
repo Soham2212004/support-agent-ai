@@ -82,6 +82,7 @@ export const api = {
   saveBotSettings: (settings) => request("/bot-settings/", { method: "POST", body: settings, auth: true }),
   getPublication: () => request("/publication/", { auth: true }),
   getAnalytics: () => request("/analytics/", { auth: true }),
+  exportAnalyticsCsvUrl: () => "/api/analytics/export.csv",
   getWidgetMode: () => request("/bot-settings/widget/", { auth: true }),
   setWidgetMode: (widget_mode) => request("/bot-settings/widget/", { method: "POST", body: { widget_mode }, auth: true }),
   publishBot: () => request("/publication/publish/", { method: "POST", body: {}, auth: true }),

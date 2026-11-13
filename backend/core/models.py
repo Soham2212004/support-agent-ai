@@ -171,6 +171,11 @@ class Message(models.Model):
         COMPLETE = "complete", "Complete"
         PARTIAL = "partial", "Partial"
 
+    class Feedback(models.TextChoices):
+        NONE = "none", "No feedback"
+        UP = "up", "Thumbs up"
+        DOWN = "down", "Thumbs down"
+
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     seq = models.PositiveIntegerField()  # 1, 2, 3 ... in the order the messages were sent
     role = models.CharField(max_length=10, choices=Role.choices)
@@ -183,6 +188,7 @@ class Message(models.Model):
     llm_model = models.CharField(max_length=100, blank=True, default="")
     tokens_in = models.PositiveIntegerField(default=0)
     tokens_out = models.PositiveIntegerField(default=0)
+    feedback = models.CharField(max_length=10, choices=Feedback.choices, default=Feedback.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -195,6 +201,52 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.role} #{self.seq}"
+
+
+class HandoffRequest(models.Model):
+    """A visitor's request for a human, tied to a public chat session."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        RESOLVED = "resolved", "Resolved"
+
+    session = models.ForeignKey("PublicChatSession", on_delete=models.CASCADE, related_name="handoff_requests")
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="handoff_requests")
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "handoff request"
+        verbose_name_plural = "handoff requests"
+
+
+class VisitorDataRequest(models.Model):
+    """A GDPR-style export or deletion request, verified by a one-time emailed token."""
+
+    class Kind(models.TextChoices):
+        EXPORT = "export", "Export"
+        DELETE = "delete", "Delete"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending verification"
+        COMPLETED = "completed", "Completed"
+        EXPIRED = "expired", "Expired"
+
+    email = models.EmailField()
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    token_hash = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "visitor data request"
+        verbose_name_plural = "visitor data requests"
 
 
 class ChatUsage(models.Model):
@@ -402,6 +454,11 @@ class PublicChatMessage(models.Model):
         USER = "user", "User"
         ASSISTANT = "assistant", "Assistant"
 
+    class Feedback(models.TextChoices):
+        NONE = "none", "No feedback"
+        UP = "up", "Thumbs up"
+        DOWN = "down", "Thumbs down"
+
     session = models.ForeignKey(PublicChatSession, on_delete=models.CASCADE, related_name="messages")
     seq = models.PositiveIntegerField()
     role = models.CharField(max_length=10, choices=Role.choices)
@@ -410,6 +467,7 @@ class PublicChatMessage(models.Model):
     status = models.CharField(max_length=10, default="complete")
     is_fallback = models.BooleanField(default=False)
     fallback_reason = models.CharField(max_length=20, blank=True, default="")
+    feedback = models.CharField(max_length=10, choices=Feedback.choices, default=Feedback.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -417,7 +475,6 @@ class PublicChatMessage(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["session", "seq"], name="unique_public_message_seq"),
         ]
-
 
 class PublicMonthlyUsage(models.Model):
     account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="public_monthly_usage")

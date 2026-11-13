@@ -8,6 +8,17 @@ WIDGET_JS = r"""
   var apiBase = (script.getAttribute('data-api-base') || new URL(script.src).origin).replace(/\/$/, '');
   if (!apiKey) { console.error('[SupportAgentAI widget] data-api-key is required.'); return; }
 
+  var themeAttr = script.getAttribute('data-theme') || 'auto';
+  function resolveDark() {
+    if (themeAttr === 'dark') return true;
+    if (themeAttr === 'light') return false;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  var dark = resolveDark();
+  var palette = dark
+    ? { bg: '#1b1f27', panelBg: '#22262f', text: '#f1f1f1', border: '#3a3f4b', bubbleAssistant: '#2a2f3a', inputBg: '#2a2f3a' }
+    : { bg: '#fff', panelBg: '#fff', text: '#17202a', border: '#ddd', bubbleAssistant: '#fff', inputBg: '#fff' };
+
   var state = { token: null, bot: null };
 
   function el(tag, attrs, children) {
@@ -29,7 +40,7 @@ WIDGET_JS = r"""
 
   var panel = el('div', { style:
     'position:fixed;bottom:92px;right:20px;width:340px;max-width:92vw;height:480px;max-height:70vh;' +
-    'background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28);display:none;' +
+    'background:' + palette.panelBg + ';color:' + palette.text + ';border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28);display:none;' +
     'flex-direction:column;overflow:hidden;z-index:999999;font-family:system-ui,-apple-system,sans-serif;'
   });
 
@@ -39,8 +50,8 @@ WIDGET_JS = r"""
   var closeBtn = el('button', { style: 'background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;', onclick: togglePanel }, ['\u00D7']);
   header.appendChild(headerTitle); header.appendChild(closeBtn);
 
-  var body = el('div', { style: 'flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f2f4f1;' });
-  var formArea = el('div', { style: 'padding:12px;border-top:1px solid #eee;flex-shrink:0;' });
+  var body = el('div', { style: 'flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:' + (dark ? '#15181e' : '#f2f4f1') + ';' });
+  var formArea = el('div', { style: 'padding:12px;border-top:1px solid ' + palette.border + ';flex-shrink:0;' });
 
   panel.appendChild(header); panel.appendChild(body); panel.appendChild(formArea);
   document.body.appendChild(panel);
@@ -53,7 +64,7 @@ WIDGET_JS = r"""
     if (open && !state.token && !formArea.dataset.loading) renderLeadForm();
   }
 
-  function inputStyle() { return 'width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font:inherit;box-sizing:border-box;'; }
+  function inputStyle() { return 'width:100%;padding:8px 10px;border:1px solid ' + palette.border + ';border-radius:8px;font:inherit;box-sizing:border-box;background:' + palette.inputBg + ';color:' + palette.text + ';'; }
   function btnStyle() { return 'width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:#2b45f5;color:#fff;font-weight:600;cursor:pointer;'; }
 
   function renderLeadForm() {
@@ -98,7 +109,7 @@ WIDGET_JS = r"""
     var wrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;' });
     questions.forEach(function(q) {
       wrap.appendChild(el('button', {
-        style: 'padding:6px 10px;border:1px solid #ddd;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;',
+        style: 'padding:6px 10px;border:1px solid ' + palette.border + ';border-radius:999px;background:' + palette.bubbleAssistant + ';color:' + palette.text + ';font-size:12px;cursor:pointer;',
         onclick: function() { sendMessage(q); }
       }, [q]));
     });
@@ -108,8 +119,8 @@ WIDGET_JS = r"""
   function addMessage(role, text) {
     var bubble = el('div', { style:
       'max-width:85%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;' +
-      (role === 'user' ? 'align-self:flex-end;background:#2b45f5;color:#fff;' : 'align-self:flex-start;background:#fff;border:1px solid #ddd;')
-    }, [text]);
+      (role === 'user' ? 'align-self:flex-end;background:#2b45f5;color:#fff;' : 'align-self:flex-start;background:' + palette.bubbleAssistant + ';color:' + palette.text + ';border:1px solid ' + palette.border + ';')
+      }, [text]);
     body.appendChild(bubble);
     body.scrollTop = body.scrollHeight;
     return bubble;
