@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import analytics, api, bot_settings, chat, documents, gdpr, public_api, publishing
+from . import analytics, api, bot_settings, chat, documents, gdpr, handoffs, public_api, publishing, status
 
 urlpatterns = [
     path("register/", api.register, name="api-register"),
@@ -8,6 +8,7 @@ urlpatterns = [
     path("me/", api.me, name="api-me"),
     path("analytics/", analytics.analytics, name="api-analytics"),
     path("analytics/export.csv", analytics.export_csv, name="api-analytics-export"),
+    path("analytics/downvote-note/", analytics.save_downvote_note, name="api-downvote-note"),
     path("document/", documents.document, name="api-document"),
     path("document/reindex/", documents.reindex, name="api-document-reindex"),
     path("document/search/", documents.search, name="api-document-search"),
@@ -31,6 +32,9 @@ urlpatterns = [
     path("public/handoff/", public_api.request_handoff, name="public-handoff"),
     path("public/data-request/", gdpr.request_data_action, name="public-data-request"),
     path("public/data-request/confirm/", gdpr.confirm_data_action, name="public-data-request-confirm"),
+    path("public/changelog/", status.changelog_list, name="public-changelog"),
+    path("handoffs/", handoffs.list_handoffs, name="api-handoffs"),
+    path("handoffs/<int:handoff_id>/resolve/", handoffs.resolve_handoff, name="api-handoff-resolve"),
     path(
         "public/chat/messages/<int:message_id>/feedback/",
         public_api.public_message_feedback,

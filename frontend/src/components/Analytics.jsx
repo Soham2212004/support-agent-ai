@@ -1,6 +1,93 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, getToken } from "../api.js";
 
+function DownvotedRow({ row }) {
+  const [status, setStatus] = useState(row.note_status);
+  const [note, setNote] = useState(row.note);
+  const [draft, setDraft] = useState(row.note);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function save(newStatus, newNote) {
+    setBusy(true);
+    try {
+      await api.saveDownvoteNote({
+        key_hash: row.key_hash,
+        status: newStatus,
+        note: newNote,
+        question: row.question,
+      });
+      setStatus(newStatus);
+      setNote(newNote);
+      setEditing(false);
+    } catch {
+      /* leave UI as-is; a retry is just clicking again */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li>
+      <div className="analytics-table-row-head">
+        <strong>{row.question}</strong>
+        <span className="publish-badge">{row.count}×</span>
+      </div>
+      <p className="upload-help" style={{ marginTop: "0.4rem" }}>{row.answer}</p>
+      <p className="upload-help">last rated {new Date(row.last_rated_at).toLocaleString()}</p>
+
+      <div className="downvote-actions">
+        <span className={`publish-badge ${status === "resolved" ? "publish-badge-live" : ""}`}>
+          {status === "resolved" ? "Resolved" : "Needs attention"}
+        </span>
+        {status === "open" ? (
+          <button
+            type="button"
+            className="button button-small button-ghost"
+            disabled={busy}
+            onClick={() => save("resolved", note)}
+          >
+            Mark resolved
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="button button-small button-ghost"
+            disabled={busy}
+            onClick={() => save("open", note)}
+          >
+            Reopen
+          </button>
+        )}
+        <button
+          type="button"
+          className="button button-small button-ghost"
+          onClick={() => {
+            setDraft(note);
+            setEditing((e) => !e);
+          }}
+        >
+          {note ? "Edit note" : "Add note"}
+        </button>
+      </div>
+
+      {editing && (
+        <div style={{ marginTop: "0.6rem" }}>
+          <textarea
+            rows={2}
+            maxLength={1000}
+            placeholder="e.g. Need to add a section on refund timelines to the doc."
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => save(status, draft)}
+          />
+        </div>
+      )}
+      {!editing && note && <p className="upload-help" style={{ marginTop: "0.4rem" }}>Note: {note}</p>}
+    </li>
+  );
+}
+
 export default function Analytics() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -123,15 +210,8 @@ export default function Analytics() {
         <p className="upload-help">No downvoted answers in this window.</p>
       ) : (
         <ul className="analytics-table">
-          {data.top_downvoted.map((row, i) => (
-            <li key={i}>
-              <div className="analytics-table-row-head">
-                <strong>{row.question}</strong>
-                <span className="publish-badge">{row.count}×</span>
-              </div>
-              <p className="upload-help" style={{ marginTop: "0.4rem" }}>{row.answer}</p>
-              <p className="upload-help">last rated {new Date(row.last_rated_at).toLocaleString()}</p>
-            </li>
+          {data.top_downvoted.map((row) => (
+            <DownvotedRow key={row.key_hash} row={row} />
           ))}
         </ul>
       )}

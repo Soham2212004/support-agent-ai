@@ -1154,3 +1154,126 @@ button.button {
   border-color: var(--line);
   background: var(--paper);
 }
+
+
+.status-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 999px;
+  background: #e3f4e8;
+  border: 1px solid #a8d8b5;
+  color: #14532d;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #15803d;
+}
+
+.changelog-list {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.changelog-list li {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--white);
+}
+
+.changelog-date {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--cobalt);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.changelog-list h3 {
+  margin-top: 0.4rem;
+  font-size: 1.1rem;
+}
+
+.changelog-list p {
+  margin-top: 0.5rem;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}
+
+.tab-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #b91c1c;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.onboarding-card {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #e9edff;
+}
+
+.onboarding-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.onboarding-done {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+}
+
+.onboarding-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--white);
+  border: 1.5px solid var(--cobalt);
+  color: var(--cobalt);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.onboarding-done .onboarding-check {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
+
+.downvote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}

@@ -56,7 +56,9 @@ export default function Layout() {
 
       <footer className="site-footer">
         <span>© 2026 Support Agent AI</span>
-        <a href="mailto:hello@supportagent.ai">hello@supportagent.ai</a>
+        <span>
+          <Link to="/status">Status</Link> · <a href="mailto:hello@supportagent.ai">hello@supportagent.ai</a>
+        </span>
       </footer>
     </>
   );

@@ -249,6 +249,47 @@ class VisitorDataRequest(models.Model):
         verbose_name_plural = "visitor data requests"
 
 
+class ChangelogEntry(models.Model):
+    """A public update shown on the /status page. Managed by you in Django admin."""
+
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    published_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-published_at"]
+        verbose_name = "changelog entry"
+        verbose_name_plural = "changelog entries"
+
+    def __str__(self):
+        return self.title
+
+
+class DownvoteNote(models.Model):
+    """A client's tracking note on a downvoted Q&A pair, keyed by a hash of question+answer."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Needs attention"
+        RESOLVED = "resolved", "Resolved"
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="downvote_notes")
+    key_hash = models.CharField(max_length=64)
+    question = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "downvote note"
+        verbose_name_plural = "downvote notes"
+        constraints = [
+            models.UniqueConstraint(fields=["account", "key_hash"], name="unique_downvote_note"),
+        ]
+
+
 class ChatUsage(models.Model):
     """How many test messages a client has used on one (UTC) day. Enforces the daily limit."""
 
