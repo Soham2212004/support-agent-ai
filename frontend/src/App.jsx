@@ -6,6 +6,7 @@ import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import ApiDocs from "./pages/ApiDocs.jsx";
 import PublicChatDemo from "./pages/PublicChatDemo.jsx";
+import StatusPage from "./pages/StatusPage.jsx";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="api-docs" element={<ApiDocs />} />
         <Route path="demo" element={<PublicChatDemo />} />
+        <Route path="status" element={<StatusPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

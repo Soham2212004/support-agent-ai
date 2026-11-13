@@ -398,5 +398,23 @@ def request_handoff(request):
     if existing_open:
         return _cors(JsonResponse({"message": "A human has already been requested for this chat."}), origin)
 
-    HandoffRequest.objects.create(session=session, account=session.account, reason=reason)
+    handoff = HandoffRequest.objects.create(session=session, account=session.account, reason=reason)
+
+    try:
+        from django.core.mail import send_mail
+
+        send_mail(
+            subject=f"A visitor requested a human — {session.visitor_name}",
+            message=(
+                f"{session.visitor_name} ({session.visitor_email}) asked for a human in your chatbot.\n\n"
+                f"Reason given: {reason or '(none provided)'}\n\n"
+                f"Review this conversation in your dashboard under the Handoffs tab."
+            ),
+            from_email=None,
+            recipient_list=[session.account.email],
+            fail_silently=True,
+        )
+    except Exception:
+        logger.exception("Could not send handoff notification email for handoff %s", handoff.pk)
+
     return _cors(JsonResponse({"message": "A team member will follow up by email."}, status=201), origin)

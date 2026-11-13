@@ -6,6 +6,8 @@ import Chat from "../components/Chat.jsx";
 import BotSettings from "../components/BotSettings.jsx";
 import Publishing from "../components/Publishing.jsx";
 import Analytics from "../components/Analytics.jsx";
+import HandoffRequests from "../components/HandoffRequests.jsx";
+import OnboardingChecklist from "../components/OnboardingChecklist.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -14,6 +16,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("chat");
   const [settingsRevision, setSettingsRevision] = useState(0);
+  const [handoffCount, setHandoffCount] = useState(0);
 
   const load = useCallback(async () => {
     setError("");
@@ -39,6 +42,7 @@ export default function Dashboard() {
       return;
     }
     load();
+    api.getHandoffs().then((data) => setHandoffCount(data.open_count)).catch(() => {});
   }, [load, navigate]);
 
   if (loading && !account) {
@@ -133,10 +137,19 @@ export default function Dashboard() {
         >
           Analytics
         </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "handoffs" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("handoffs")}
+          aria-current={activeTab === "handoffs" ? "page" : undefined}
+        >
+          Handoffs{handoffCount > 0 && <span className="tab-badge">{handoffCount}</span>}
+        </button>
       </nav>
 
       {activeTab === "chat" && (
         <>
+          <OnboardingChecklist />
           <DocumentUpload />
           <Chat settingsRevision={settingsRevision} />
         </>
@@ -144,6 +157,7 @@ export default function Dashboard() {
       {activeTab === "settings" && <BotSettings onSave={() => setSettingsRevision((r) => r + 1)} />}
       {activeTab === "publish" && <Publishing />}
       {activeTab === "analytics" && <Analytics />}
+      {activeTab === "handoffs" && <HandoffRequests onCountChange={setHandoffCount} />}
     </main>
   );
 }

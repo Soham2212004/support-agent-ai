@@ -5,10 +5,12 @@ from django.utils.html import format_html
 
 from .models import (
     AdminAuditLog,
+    ChangelogEntry,
     ClientAccount,
     ClientDocument,
     DocumentChunk,
     BotSettings,
+    DownvoteNote,
     HandoffRequest,
     IndexingLog,
     PurgeHeartbeat,
@@ -388,3 +390,23 @@ class HandoffRequestAdmin(admin.ModelAdmin):
             status=HandoffRequest.Status.RESOLVED, resolved_at=timezone.now()
         )
         self.message_user(request, f"{count} request(s) marked resolved.", messages.SUCCESS)
+        
+        
+        
+@admin.register(ChangelogEntry)
+class ChangelogEntryAdmin(admin.ModelAdmin):
+    list_display = ("title", "published_at", "created_at")
+    date_hierarchy = "published_at"
+    search_fields = ("title", "body")
+
+
+@admin.register(DownvoteNote)
+class DownvoteNoteAdmin(admin.ModelAdmin):
+    list_display = ("account", "question", "status", "updated_at")
+    list_filter = ("status", "updated_at")
+    search_fields = ("account__email", "question", "note")
+    list_select_related = ("account",)
+    readonly_fields = ("account", "key_hash", "question", "created_at")
+
+    def has_add_permission(self, request):
+        return False

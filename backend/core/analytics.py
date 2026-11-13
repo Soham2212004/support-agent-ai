@@ -6,8 +6,13 @@ from django.db.models import Avg, Q
 from django.http import JsonResponse
 from django.utils import timezone
 
-from .api import client_required
-from .models import Message, PublicChatMessage
+import hashlib
+
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+from .api import client_required, error, read_json
+from .models import DownvoteNote, Message, PublicChatMessage
 
 WINDOW_DAYS = 7
 MAX_TOP_QUESTIONS = 15
@@ -104,16 +109,18 @@ def _record_downvote(counts, question, answer, when):
     key = _normalize(question) + "||" + _normalize(answer)
     if not key:
         return
-    if key not in counts:
-        counts[key] = {
+    key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    if key_hash not in counts:
+        counts[key_hash] = {
             "question": question.strip(),
             "answer": answer.strip(),
             "count": 0,
             "last_rated_at": when,
+            "key_hash": key_hash,
         }
-    counts[key]["count"] += 1
-    if when > counts[key]["last_rated_at"]:
-        counts[key]["last_rated_at"] = when
+    counts[key_hash]["count"] += 1
+    if when > counts[key_hash]["last_rated_at"]:
+        counts[key_hash]["last_rated_at"] = when
 
 
 def _record(counts, text, reason, when):
@@ -193,12 +200,19 @@ def _handle(request):
     top_downvoted = sorted(
         downvote_counts.values(), key=lambda row: (-row["count"], -row["last_rated_at"].timestamp())
     )[:MAX_TOP_QUESTIONS]
+    notes_by_hash = {
+        n.key_hash: n
+        for n in DownvoteNote.objects.filter(account=account, key_hash__in=[r["key_hash"] for r in top_downvoted])
+    }
     top_downvoted = [
         {
+            "key_hash": row["key_hash"],
             "question": row["question"],
             "answer": row["answer"][:280] + ("..." if len(row["answer"]) > 280 else ""),
             "count": row["count"],
             "last_rated_at": row["last_rated_at"].isoformat(),
+            "note_status": notes_by_hash[row["key_hash"]].status if row["key_hash"] in notes_by_hash else "open",
+            "note": notes_by_hash[row["key_hash"]].note if row["key_hash"] in notes_by_hash else "",
         }
         for row in top_downvoted
     ]
@@ -249,3 +263,26 @@ def _handle(request):
             "top_downvoted": top_downvoted,
         }
     )
+    
+    
+@csrf_exempt
+@require_POST
+@client_required(approved_only=True)
+def save_downvote_note(request):
+    account = request.client_account
+    data = read_json(request) or {}
+    key_hash = str(data.get("key_hash", "")).strip()
+    if not key_hash:
+        return error("key_hash is required.", 400)
+    status = str(data.get("status", "")).strip().lower()
+    if status not in (DownvoteNote.Status.OPEN, DownvoteNote.Status.RESOLVED):
+        return error("status must be 'open' or 'resolved'.", 400)
+    note = str(data.get("note", "")).strip()[:1000]
+    question = str(data.get("question", "")).strip()[:500]
+
+    obj, _ = DownvoteNote.objects.update_or_create(
+        account=account,
+        key_hash=key_hash,
+        defaults={"status": status, "note": note, "question": question},
+    )
+    return JsonResponse({"message": "Saved.", "status": obj.status, "note": obj.note})
