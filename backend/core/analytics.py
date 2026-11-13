@@ -62,6 +62,60 @@ def _collect_public_chat_fallbacks(account, cutoff, counts):
         _record(counts, user_msg.content, fm.fallback_reason, fm.created_at)
 
 
+def _collect_test_chat_downvotes(account, cutoff, counts):
+    downvoted = (
+        Message.objects.filter(
+            conversation__account=account,
+            role=Message.Role.ASSISTANT,
+            feedback=Message.Feedback.DOWN,
+            created_at__gte=cutoff,
+        )
+        .select_related("conversation")
+        .order_by("seq")
+    )
+    for dm in downvoted:
+        user_msg = Message.objects.filter(
+            conversation=dm.conversation, role=Message.Role.USER, seq=dm.seq - 1
+        ).first()
+        question = user_msg.content.strip() if user_msg and user_msg.content.strip() else "(unknown question)"
+        _record_downvote(counts, question, dm.content, dm.created_at)
+
+
+def _collect_public_chat_downvotes(account, cutoff, counts):
+    downvoted = (
+        PublicChatMessage.objects.filter(
+            session__account=account,
+            role=PublicChatMessage.Role.ASSISTANT,
+            feedback=PublicChatMessage.Feedback.DOWN,
+            created_at__gte=cutoff,
+        )
+        .select_related("session")
+        .order_by("seq")
+    )
+    for dm in downvoted:
+        user_msg = PublicChatMessage.objects.filter(
+            session=dm.session, role=PublicChatMessage.Role.USER, seq=dm.seq - 1
+        ).first()
+        question = user_msg.content.strip() if user_msg and user_msg.content.strip() else "(unknown question)"
+        _record_downvote(counts, question, dm.content, dm.created_at)
+
+
+def _record_downvote(counts, question, answer, when):
+    key = _normalize(question) + "||" + _normalize(answer)
+    if not key:
+        return
+    if key not in counts:
+        counts[key] = {
+            "question": question.strip(),
+            "answer": answer.strip(),
+            "count": 0,
+            "last_rated_at": when,
+        }
+    counts[key]["count"] += 1
+    if when > counts[key]["last_rated_at"]:
+        counts[key]["last_rated_at"] = when
+
+
 def _record(counts, text, reason, when):
     key = _normalize(text)
     if not key:
@@ -132,6 +186,23 @@ def _handle(request):
         for row in top_unanswered
     ]
 
+    downvote_counts = OrderedDict()
+    _collect_test_chat_downvotes(account, cutoff, downvote_counts)
+    _collect_public_chat_downvotes(account, cutoff, downvote_counts)
+
+    top_downvoted = sorted(
+        downvote_counts.values(), key=lambda row: (-row["count"], -row["last_rated_at"].timestamp())
+    )[:MAX_TOP_QUESTIONS]
+    top_downvoted = [
+        {
+            "question": row["question"],
+            "answer": row["answer"][:280] + ("..." if len(row["answer"]) > 280 else ""),
+            "count": row["count"],
+            "last_rated_at": row["last_rated_at"].isoformat(),
+        }
+        for row in top_downvoted
+    ]
+
     test_user_count = Message.objects.filter(
         conversation__account=account, role=Message.Role.USER, created_at__gte=cutoff
     ).count()
@@ -157,6 +228,13 @@ def _handle(request):
         avg_in=Avg("tokens_in"), avg_out=Avg("tokens_out")
     )
 
+    downvote_total = test_assistant.filter(feedback=Message.Feedback.DOWN).count() + public_assistant.filter(
+        feedback=PublicChatMessage.Feedback.DOWN
+    ).count()
+    upvote_total = test_assistant.filter(feedback=Message.Feedback.UP).count() + public_assistant.filter(
+        feedback=PublicChatMessage.Feedback.UP
+    ).count()
+
     return JsonResponse(
         {
             "window_days": WINDOW_DAYS,
@@ -165,6 +243,9 @@ def _handle(request):
             "fallback_rate": round(fallback_total / assistant_total * 100, 1) if assistant_total else 0,
             "avg_tokens_in": round(token_stats["avg_in"] or 0),
             "avg_tokens_out": round(token_stats["avg_out"] or 0),
+            "upvote_count": upvote_total,
+            "downvote_count": downvote_total,
             "top_unanswered": top_unanswered,
+            "top_downvoted": top_downvoted,
         }
     )

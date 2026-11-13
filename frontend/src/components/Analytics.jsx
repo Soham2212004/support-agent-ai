@@ -79,6 +79,14 @@ export default function Analytics() {
           <span className="analytics-stat-label">Fallback rate</span>
         </div>
         <div className="analytics-stat">
+          <span className="analytics-stat-value">{data.upvote_count}</span>
+          <span className="analytics-stat-label">👍 Helpful ratings</span>
+        </div>
+        <div className="analytics-stat">
+          <span className="analytics-stat-value">{data.downvote_count}</span>
+          <span className="analytics-stat-label">👎 Unhelpful ratings</span>
+        </div>
+        <div className="analytics-stat">
           <span className="analytics-stat-value">{data.avg_tokens_in}</span>
           <span className="analytics-stat-label">Avg tokens in (test chat)</span>
         </div>
@@ -102,6 +110,27 @@ export default function Analytics() {
               <p className="upload-help">
                 {row.reason_label} · last asked {new Date(row.last_asked_at).toLocaleString()}
               </p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>Answers visitors rated 👎</h3>
+      <p className="upload-help">
+        Unlike the list above, these are answers the bot gave confidently — visitors just didn't find them helpful.
+      </p>
+      {data.top_downvoted.length === 0 ? (
+        <p className="upload-help">No downvoted answers in this window.</p>
+      ) : (
+        <ul className="analytics-table">
+          {data.top_downvoted.map((row, i) => (
+            <li key={i}>
+              <div className="analytics-table-row-head">
+                <strong>{row.question}</strong>
+                <span className="publish-badge">{row.count}×</span>
+              </div>
+              <p className="upload-help" style={{ marginTop: "0.4rem" }}>{row.answer}</p>
+              <p className="upload-help">last rated {new Date(row.last_rated_at).toLocaleString()}</p>
             </li>
           ))}
         </ul>

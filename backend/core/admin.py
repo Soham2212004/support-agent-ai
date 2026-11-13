@@ -216,7 +216,12 @@ class ConversationAdmin(admin.ModelAdmin):
                 asked_at = message.created_at
             else:
                 who = "Assistant"
-                background = "rgba(245, 165, 36, 0.22)" if message.is_fallback else "rgba(128, 128, 128, 0.14)"
+                if message.feedback == Message.Feedback.DOWN:
+                    background = "rgba(185, 28, 28, 0.18)"
+                elif message.is_fallback:
+                    background = "rgba(245, 165, 36, 0.22)"
+                else:
+                    background = "rgba(128, 128, 128, 0.14)"
                 if asked_at:
                     details.append(f"answered in {(message.created_at - asked_at).total_seconds():.1f}s")
                 if message.provider:
@@ -225,6 +230,10 @@ class ConversationAdmin(admin.ModelAdmin):
                     details.append(f"{message.tokens_in} tokens in, {message.tokens_out} out")
                 if message.is_fallback:
                     details.append(f"no answer found ({message.fallback_reason or 'fallback'})")
+                if message.feedback == Message.Feedback.UP:
+                    details.append("rated \U0001F44D by visitor")
+                elif message.feedback == Message.Feedback.DOWN:
+                    details.append("rated \U0001F44E by visitor")
                 if message.status == Message.Status.PARTIAL:
                     details.append("interrupted")
                 sources = ", ".join(f"[{c.get('n')}] {c.get('label', '')}" for c in (message.citations or []))
