@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import analytics, api, bot_settings, chat, documents, gdpr, handoffs, public_api, publishing, status
+from . import analytics, api, bot_settings, chat, documents, faq, gdpr, handoffs, public_api, publishing, status
 
 urlpatterns = [
     path("register/", api.register, name="api-register"),
@@ -12,6 +12,9 @@ urlpatterns = [
     path("document/", documents.document, name="api-document"),
     path("document/reindex/", documents.reindex, name="api-document-reindex"),
     path("document/search/", documents.search, name="api-document-search"),
+    path("document/versions/", documents.version_history, name="api-document-versions"),
+    path("faq/", faq.faq_list, name="api-faq-list"),
+    path("faq/<int:entry_id>/", faq.faq_detail, name="api-faq-detail"),
     path("chat/", chat.state, name="api-chat"),
     path("chat/messages/", chat.send_message, name="api-chat-message"),
     path("chat/messages/<int:message_id>/feedback/", chat.message_feedback, name="api-chat-message-feedback"),

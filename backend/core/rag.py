@@ -9,7 +9,7 @@ from pgvector.django import CosineDistance
 
 from . import llm
 from .embeddings import embed_query
-from .models import BotSettings, DEFAULT_BOT_FALLBACK, DocumentChunk, PublishedBotChunk
+from .models import BotSettings, DEFAULT_BOT_FALLBACK, DocumentChunk, FAQEntry, PublishedBotChunk
 
 logger = logging.getLogger(__name__)
 
@@ -50,28 +50,61 @@ def is_smalltalk(text):
 
 
 def retrieve(account, document, question, published_version=None):
-    """The best-matching passages of this client's document, most similar first."""
+    """The best-matching passages, most similar first — from the document and, for a draft bot, FAQ entries too.
+
+    A published bot's FAQ passages are already baked into its PublishedBotChunk snapshot at publish time,
+    so only the draft path needs to query FAQEntry separately here.
+    """
     embedding_model = published_version.embedding_model if published_version else settings.EMBEDDING_MODEL
     vector = embed_query(question, model_name=embedding_model)
+
+    candidates = []
     if published_version:
-        rows = PublishedBotChunk.objects.filter(version=published_version, embedding_model=embedding_model)
-    else:
-        rows = DocumentChunk.objects.filter(
-            account=account, document=document, embedding_model=embedding_model
+        rows = (
+            PublishedBotChunk.objects.filter(version=published_version, embedding_model=embedding_model)
+            .annotate(distance=CosineDistance("embedding", vector))
+            .order_by("distance")
+            .defer("embedding")[: settings.SEARCH_TOP_K]
         )
-    rows = rows.annotate(distance=CosineDistance("embedding", vector)).order_by("distance").defer("embedding")
-    rows = rows[: settings.SEARCH_TOP_K]
+        for chunk in rows:
+            label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
+            candidates.append(
+                {"label": label, "page": chunk.page_number, "text": chunk.text, "distance": float(chunk.distance)}
+            )
+    else:
+        if document is not None:
+            doc_rows = (
+                DocumentChunk.objects.filter(account=account, document=document, embedding_model=embedding_model)
+                .annotate(distance=CosineDistance("embedding", vector))
+                .order_by("distance")
+                .defer("embedding")[: settings.SEARCH_TOP_K]
+            )
+            for chunk in doc_rows:
+                label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
+                candidates.append(
+                    {"label": label, "page": chunk.page_number, "text": chunk.text, "distance": float(chunk.distance)}
+                )
+
+        faq_rows = (
+            FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=embedding_model)
+            .annotate(distance=CosineDistance("embedding", vector))
+            .order_by("distance")[: settings.SEARCH_TOP_K]
+        )
+        for entry in faq_rows:
+            candidates.append(
+                {
+                    "label": "FAQ",
+                    "page": None,
+                    "text": f"Question: {entry.question}\nAnswer: {entry.answer}",
+                    "distance": float(entry.distance),
+                }
+            )
+
+    candidates.sort(key=lambda c: c["distance"])
     passages = []
-    for number, chunk in enumerate(rows, start=1):
-        label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
+    for number, c in enumerate(candidates[: settings.SEARCH_TOP_K], start=1):
         passages.append(
-            {
-                "n": number,
-                "label": label,
-                "page": chunk.page_number,
-                "text": chunk.text,
-                "score": round(1 - float(chunk.distance), 3),
-            }
+            {"n": number, "label": c["label"], "page": c["page"], "text": c["text"], "score": round(1 - c["distance"], 3)}
         )
     return passages
 

@@ -20,6 +20,7 @@ from .models import (
     ClientAccount,
     ClientDocument,
     DocumentChunk,
+    FAQEntry,
     PublishedBotChunk,
     PublishedBotVersion,
     PublicMonthlyUsage,
@@ -68,14 +69,18 @@ def publication(request):
 def publish(request):
     account = request.client_account
     document = ClientDocument.objects.filter(account=account).first()
-    if document is None:
-        return error("Upload a document before publishing.", 409)
-    if document.index_status != ClientDocument.IndexStatus.READY:
-        return error("Wait until your document is ready for search before publishing.", 409)
+    faq_entries = list(FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY))
 
-    chunks = list(DocumentChunk.objects.filter(account=account, document=document).order_by("ordinal"))
-    if not chunks:
-        return error("The document has no indexed passages. Reindex it before publishing.", 409)
+    chunks = []
+    if document is not None:
+        if document.index_status != ClientDocument.IndexStatus.READY:
+            return error("Wait until your document is ready for search before publishing.", 409)
+        chunks = list(DocumentChunk.objects.filter(account=account, document=document).order_by("ordinal"))
+
+    if not chunks and not faq_entries:
+        return error("Add a document or at least one ready FAQ entry before publishing.", 409)
+
+    embedding_model = chunks[0].embedding_model if chunks else (faq_entries[0].embedding_model or settings.EMBEDDING_MODEL)
 
     bot_settings = BotSettings.get_for_account(account)
     with transaction.atomic():
@@ -84,17 +89,21 @@ def publish(request):
         version = PublishedBotVersion.objects.create(
             account=account,
             version=(previous.version if previous else 0) + 1,
-            document_name=document.original_filename,
-            document_hash=document.content_hash,
-            document_text=document.extracted_text,
-            document_sections=document.sections,
-            document_metadata={
-                "file_type": document.file_type,
-                "size_bytes": document.size_bytes,
-                "page_count": document.page_count,
-                "word_count": document.word_count,
-                "char_count": document.char_count,
-            },
+            document_name=document.original_filename if document else "",
+            document_hash=document.content_hash if document else "",
+            document_text=document.extracted_text if document else "",
+            document_sections=document.sections if document else [],
+            document_metadata=(
+                {
+                    "file_type": document.file_type,
+                    "size_bytes": document.size_bytes,
+                    "page_count": document.page_count,
+                    "word_count": document.word_count,
+                    "char_count": document.char_count,
+                }
+                if document
+                else {}
+            ),
             settings_snapshot={
                 "name": bot_settings.name,
                 "display_name": bot_settings.display_name,
@@ -110,24 +119,36 @@ def publish(request):
                 "escalation_email": bot_settings.escalation_email,
                 "widget_mode": bot_settings.widget_mode,
             },
-            embedding_model=chunks[0].embedding_model,
+            embedding_model=embedding_model,
         )
         PublishedBotVersion.objects.filter(account=account).exclude(pk=version.pk).update(is_published=False)
-        PublishedBotChunk.objects.bulk_create(
-            [
+
+        published_rows = [
+            PublishedBotChunk(
+                version=version,
+                ordinal=chunk.ordinal,
+                section_label=chunk.section_label,
+                page_number=chunk.page_number,
+                text=chunk.text,
+                embedding=chunk.embedding,
+                embedding_model=chunk.embedding_model,
+            )
+            for chunk in chunks
+        ]
+        next_ordinal = len(chunks) + 1
+        for offset, entry in enumerate(faq_entries):
+            published_rows.append(
                 PublishedBotChunk(
                     version=version,
-                    ordinal=chunk.ordinal,
-                    section_label=chunk.section_label,
-                    page_number=chunk.page_number,
-                    text=chunk.text,
-                    embedding=chunk.embedding,
-                    embedding_model=chunk.embedding_model,
+                    ordinal=next_ordinal + offset,
+                    section_label="FAQ",
+                    page_number=None,
+                    text=f"Question: {entry.question}\nAnswer: {entry.answer}",
+                    embedding=entry.embedding,
+                    embedding_model=entry.embedding_model or embedding_model,
                 )
-                for chunk in chunks
-            ],
-            batch_size=200,
-        )
+            )
+        PublishedBotChunk.objects.bulk_create(published_rows, batch_size=200)
 
     return JsonResponse({"message": "Chatbot published.", "version": serialize_version(version)}, status=201)
 

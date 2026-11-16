@@ -8,9 +8,11 @@ from .models import (
     ChangelogEntry,
     ClientAccount,
     ClientDocument,
+    DocumentArchive,
     DocumentChunk,
     BotSettings,
     DownvoteNote,
+    FAQEntry,
     HandoffRequest,
     IndexingLog,
     PurgeHeartbeat,
@@ -409,4 +411,33 @@ class DownvoteNoteAdmin(admin.ModelAdmin):
     readonly_fields = ("account", "key_hash", "question", "created_at")
 
     def has_add_permission(self, request):
+        return False
+    
+@admin.register(FAQEntry)
+class FAQEntryAdmin(admin.ModelAdmin):
+    list_display = ("question", "account", "index_status", "updated_at")
+    list_filter = ("index_status", "updated_at")
+    search_fields = ("question", "answer", "account__email")
+    list_select_related = ("account",)
+    readonly_fields = ("account", "question", "answer", "index_status", "index_error", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DocumentArchive)
+class DocumentArchiveAdmin(admin.ModelAdmin):
+    list_display = ("original_filename", "account", "file_type", "chunk_count", "uploaded_at", "archived_at")
+    list_filter = ("file_type", "archived_at")
+    search_fields = ("original_filename", "account__email")
+    list_select_related = ("account",)
+    readonly_fields = [f.name for f in DocumentArchive._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
