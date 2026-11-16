@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import DocumentSearch from "./DocumentSearch.jsx";
+import FaqManager from "./FaqManager.jsx";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED = [".pdf", ".docx", ".txt"];
@@ -13,11 +14,21 @@ function formatSize(bytes) {
 
 export default function DocumentUpload() {
   const [doc, setDoc] = useState(null);
+  const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
+
+  const loadVersions = useCallback(async () => {
+    try {
+      const data = await api.getDocumentVersions();
+      setVersions(data.versions);
+    } catch {
+      /* non-critical */
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -32,7 +43,8 @@ export default function DocumentUpload() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadVersions();
+  }, [load, loadVersions]);
 
   // while the document is being prepared for search, check again every 3 seconds
   useEffect(() => {
@@ -83,6 +95,7 @@ export default function DocumentUpload() {
     try {
       const data = await api.uploadDocument(file);
       setDoc(data.document);
+      await loadVersions();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -98,6 +111,7 @@ export default function DocumentUpload() {
     try {
       await api.deleteDocument();
       setDoc(null);
+      await loadVersions();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -119,7 +133,10 @@ export default function DocumentUpload() {
     return (
       <section className="upload-card">
         <h2>Upload your document</h2>
-        <p className="upload-help">PDF, DOCX or TXT, up to 5 MB. You can have one document at a time.</p>
+        <p className="upload-help">
+          PDF, DOCX or TXT, up to 5 MB. Uploading again replaces the current file and keeps the old one in your
+          document history. FAQ entries below work even without a document.
+        </p>
 
         {error && (
           <p className="form-error" role="alert">
@@ -149,10 +166,31 @@ export default function DocumentUpload() {
             onChange={(e) => upload(e.target.files?.[0])}
           />
         </div>
+
+        {versions.length > 0 && (
+          <>
+            <h3>Document history</h3>
+            <ul className="publish-version-list">
+              {versions.map((v, i) => (
+                <li key={i}>
+                  <div>
+                    <strong>{v.filename}</strong>
+                    <p>
+                      {v.file_type.toUpperCase()} · {v.word_count.toLocaleString()} words · {v.chunk_count} chunks
+                    </p>
+                    <p className="upload-help">
+                      Uploaded {new Date(v.uploaded_at).toLocaleDateString()} · replaced{" "}
+                      {new Date(v.archived_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
     );
   }
-
   return (
     <section className="upload-card">
       <h2>Your document</h2>
@@ -219,14 +257,46 @@ export default function DocumentUpload() {
         {doc.preview_truncated ? "…" : ""}
       </pre>
 
-      {doc.index_status === "ready" && <DocumentSearch />}
+      <FaqManager />
+      <DocumentSearch />
 
       <div className="doc-actions">
+        <button type="button" className="button button-ghost" onClick={() => inputRef.current?.click()} disabled={busy}>
+          Replace document
+        </button>
         <button type="button" className="button button-ghost" onClick={remove} disabled={busy}>
           {busy ? "Deleting…" : "Delete document"}
         </button>
-        <p className="upload-help">To upload a different file, delete this one first.</p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.docx,.txt"
+          hidden
+          aria-label="Choose a replacement document"
+          onChange={(e) => upload(e.target.files?.[0])}
+        />
       </div>
+
+      {versions.length > 0 && (
+        <>
+          <h3>Document history</h3>
+          <ul className="publish-version-list">
+            {versions.map((v, i) => (
+              <li key={i}>
+                <div>
+                  <strong>{v.filename}</strong>
+                  <p>
+                    {v.file_type.toUpperCase()} · {v.word_count.toLocaleString()} words · {v.chunk_count} chunks
+                  </p>
+                  <p className="upload-help">
+                    Uploaded {new Date(v.uploaded_at).toLocaleDateString()} · replaced {new Date(v.archived_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

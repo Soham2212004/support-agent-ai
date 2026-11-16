@@ -29,7 +29,7 @@ export default function DocumentSearch() {
   return (
     <section className="search-box" aria-labelledby="search-title">
       <h3 id="search-title">Try a search</h3>
-      <p className="upload-help">Ask a question about your document to see which passages match best.</p>
+      <p className="upload-help">Ask a question to see which document or FAQ passages match best.</p>
 
       <form className="search-form" onSubmit={submit}>
         <input
@@ -59,7 +59,9 @@ export default function DocumentSearch() {
             <li key={r.rank}>
               <div className="result-head">
                 <span className="result-score">Score {r.score.toFixed(3)}</span>
-                <span className="result-where">{r.page ? `Page ${r.page}` : r.section}</span>
+                <span className="result-where">
+                  {r.source === "faq" ? "FAQ" : r.page ? `Page ${r.page}` : r.section}
+                </span>
               </div>
               <p>{r.text}</p>
             </li>

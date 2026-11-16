@@ -290,6 +290,52 @@ class DownvoteNote(models.Model):
         ]
 
 
+class FAQEntry(models.Model):
+    """A typed question-and-answer pair: a second knowledge source alongside the uploaded document."""
+
+    class IndexStatus(models.TextChoices):
+        PENDING = "pending", "Not indexed"
+        PROCESSING = "processing", "Processing"
+        READY = "ready", "Ready"
+        FAILED = "failed", "Failed"
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="faq_entries")
+    question = models.CharField(max_length=300)
+    answer = models.TextField(max_length=2000)
+    embedding = VectorField(dimensions=None, null=True, blank=True)
+    embedding_model = models.CharField(max_length=100, blank=True, default="")
+    index_status = models.CharField(max_length=12, choices=IndexStatus.choices, default=IndexStatus.PENDING)
+    index_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "FAQ entry"
+        verbose_name_plural = "FAQ entries"
+
+    def __str__(self):
+        return self.question[:60]
+
+
+class DocumentArchive(models.Model):
+    """Metadata snapshot of a document kept when it is replaced by a re-upload, for version history."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="document_archive")
+    original_filename = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=10)
+    size_bytes = models.PositiveIntegerField()
+    word_count = models.PositiveIntegerField(default=0)
+    chunk_count = models.PositiveIntegerField(default=0)
+    uploaded_at = models.DateTimeField()
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-archived_at"]
+        verbose_name = "document version (archived)"
+        verbose_name_plural = "document versions (archived)"
+
+
 class ChatUsage(models.Model):
     """How many test messages a client has used on one (UTC) day. Enforces the daily limit."""
 

@@ -7,7 +7,7 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from pgvector.django import CosineDistance
 
 from . import storage
@@ -15,12 +15,12 @@ from .api import client_required, error, read_json
 from .embeddings import embed_query
 from .extraction import ALLOWED_EXTENSIONS, ExtractionError, extract_document, get_extension
 from .indexing import start_indexing
-from .models import ClientDocument, DocumentChunk
+from .models import ClientDocument, DocumentArchive, DocumentChunk, FAQEntry
 
 logger = logging.getLogger(__name__)
 
 PREVIEW_CHARS = 700
-ALREADY_HAS_DOCUMENT = "You already have a document. Delete it before uploading a new one."
+ALREADY_HAS_DOCUMENT = "Please try uploading again in a moment."
 
 
 def serialize_document(doc):
@@ -41,6 +41,20 @@ def serialize_document(doc):
         "chunk_count": doc.chunk_count,
     }
 
+def _archive_existing(document):
+    """Keep a metadata snapshot before a document is replaced or removed; the post_delete signal removes the file."""
+    DocumentArchive.objects.create(
+        account=document.account,
+        original_filename=document.original_filename,
+        file_type=document.file_type,
+        size_bytes=document.size_bytes,
+        word_count=document.word_count,
+        chunk_count=document.chunk_count,
+        uploaded_at=document.uploaded_at,
+    )
+    document.delete()
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE"])
 @client_required(approved_only=True)
@@ -54,17 +68,14 @@ def document(request):
             refresh_stale(existing)
         return JsonResponse({"document": serialize_document(existing) if existing else None})
 
-    # ---- DELETE: remove the row; a signal removes the file ----
+    # ---- DELETE: remove the row and archive its metadata; a signal removes the file ----
     if request.method == "DELETE":
         if existing is None:
             return error("You have no document to delete.", 404)
-        existing.delete()
+        _archive_existing(existing)
         return JsonResponse({"message": "Document deleted."})
 
-    # ---- POST: upload ----
-    if existing is not None:
-        return error(ALREADY_HAS_DOCUMENT, 409)
-
+    # ---- POST: upload. Replaces any existing document, archiving its metadata first. ----
     upload = request.FILES.get("file")
     if upload is None:
         return error("Choose a file to upload.", 400)
@@ -92,6 +103,8 @@ def document(request):
 
     try:
         with transaction.atomic():
+            if existing is not None:
+                _archive_existing(existing)
             doc = ClientDocument.objects.create(
                 account=account,
                 original_filename=upload.name[:255],
@@ -113,6 +126,28 @@ def document(request):
 
     start_indexing(doc.pk)  # chunk + embed in the background
     return JsonResponse({"document": serialize_document(doc)}, status=201)
+
+
+@require_GET
+@client_required(approved_only=True)
+def version_history(request):
+    archives = DocumentArchive.objects.filter(account=request.client_account)[:50]
+    return JsonResponse(
+        {
+            "versions": [
+                {
+                    "filename": a.original_filename,
+                    "file_type": a.file_type,
+                    "size_bytes": a.size_bytes,
+                    "word_count": a.word_count,
+                    "chunk_count": a.chunk_count,
+                    "uploaded_at": a.uploaded_at.isoformat(),
+                    "archived_at": a.archived_at.isoformat(),
+                }
+                for a in archives
+            ]
+        }
+    )
 
 
 STALE_AFTER = timedelta(minutes=20)
@@ -155,7 +190,7 @@ def reindex(request):
 @require_POST
 @client_required(approved_only=True)
 def search(request):
-    """Return the passages of the client's document that best match a question."""
+    """Return the passages — from the document and FAQ entries alike — that best match a question."""
     account = request.client_account
     data = read_json(request) or {}
     query = str(data.get("query", "")).strip()
@@ -166,11 +201,14 @@ def search(request):
         return error(f"Keep your question under {MAX_QUERY_CHARS} characters.", 400)
 
     doc = ClientDocument.objects.filter(account=account).first()
-    if doc is None:
-        return error("Upload a document first.", 404)
-    refresh_stale(doc)
-    if doc.index_status != ClientDocument.IndexStatus.READY:
-        return error("Your document isn’t ready for search yet.", 409)
+    faq_ready = FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY).exists()
+    doc_ready = False
+    if doc is not None:
+        refresh_stale(doc)
+        doc_ready = doc.index_status == ClientDocument.IndexStatus.READY
+
+    if not doc_ready and not faq_ready:
+        return error("Upload a document or add a ready FAQ entry first.", 404)
 
     try:
         vector = embed_query(query)
@@ -178,22 +216,56 @@ def search(request):
         logger.exception("Could not embed the search query")
         return error("Search is unavailable right now. Please try again.", 503)
 
-    # filtered by this client and this document, always
-    matches = (
-        DocumentChunk.objects.filter(account=account, document=doc, embedding_model=settings.EMBEDDING_MODEL)
-        .annotate(distance=CosineDistance("embedding", vector))
-        .order_by("distance")
-        .defer("embedding")[: settings.SEARCH_TOP_K]
-    )
+    candidates = []
+    if doc_ready:
+        doc_matches = (
+            DocumentChunk.objects.filter(account=account, document=doc, embedding_model=settings.EMBEDDING_MODEL)
+            .annotate(distance=CosineDistance("embedding", vector))
+            .order_by("distance")
+            .defer("embedding")[: settings.SEARCH_TOP_K]
+        )
+        candidates.extend(
+            {
+                "source": "document",
+                "text": chunk.text,
+                "section": chunk.section_label,
+                "page": chunk.page_number,
+                "distance": float(chunk.distance),
+            }
+            for chunk in doc_matches
+        )
+
+    if faq_ready:
+        faq_matches = (
+            FAQEntry.objects.filter(
+                account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=settings.EMBEDDING_MODEL
+            )
+            .annotate(distance=CosineDistance("embedding", vector))
+            .order_by("distance")[: settings.SEARCH_TOP_K]
+        )
+        candidates.extend(
+            {
+                "source": "faq",
+                "text": f"Q: {entry.question}\nA: {entry.answer}",
+                "section": "FAQ",
+                "page": None,
+                "distance": float(entry.distance),
+            }
+            for entry in faq_matches
+        )
+
+    candidates.sort(key=lambda row: row["distance"])
+    top = candidates[: settings.SEARCH_TOP_K]
 
     results = [
         {
             "rank": rank,
-            "score": round(1 - float(chunk.distance), 3),
-            "text": chunk.text,
-            "section": chunk.section_label,
-            "page": chunk.page_number,
+            "score": round(1 - row["distance"], 3),
+            "text": row["text"],
+            "section": row["section"],
+            "page": row["page"],
+            "source": row["source"],
         }
-        for rank, chunk in enumerate(matches, start=1)
+        for rank, row in enumerate(top, start=1)
     ]
     return JsonResponse({"query": query, "results": results})
