@@ -33,10 +33,13 @@ urlpatterns = [
     path("public/token/", public_api.visitor_token, name="public-visitor-token"),
     path("public/chat/", public_api.public_chat, name="public-chat"),
     path("public/handoff/", public_api.request_handoff, name="public-handoff"),
+    path("public/chat/poll/", public_api.poll_messages, name="public-chat-poll"),
     path("public/data-request/", gdpr.request_data_action, name="public-data-request"),
     path("public/data-request/confirm/", gdpr.confirm_data_action, name="public-data-request-confirm"),
     path("public/changelog/", status.changelog_list, name="public-changelog"),
     path("handoffs/", handoffs.list_handoffs, name="api-handoffs"),
+    path("handoffs/<int:handoff_id>/", handoffs.handoff_detail, name="api-handoff-detail"),
+    path("handoffs/<int:handoff_id>/reply/", handoffs.reply_handoff, name="api-handoff-reply"),
     path("handoffs/<int:handoff_id>/resolve/", handoffs.resolve_handoff, name="api-handoff-resolve"),
     path(
         "public/chat/messages/<int:message_id>/feedback/",

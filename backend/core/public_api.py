@@ -36,7 +36,11 @@ from .public_common import (
 logger = logging.getLogger(__name__)
 
 VISITOR_TOKEN_SALT = "support-agent-ai.public-visitor"
-VISITOR_TOKEN_LIFETIME = timedelta(minutes=15)
+# 30 minutes, matched to the handoff auto-expiry window below, so a visitor's token
+# doesn't go stale mid-handoff while waiting for a human reply.
+VISITOR_TOKEN_LIFETIME = timedelta(minutes=30)
+HANDOFF_REMINDER_AFTER = timedelta(minutes=10)
+HANDOFF_EXPIRE_AFTER = timedelta(minutes=30)
 MAX_MESSAGE_CHARS = 1000
 HISTORY_MESSAGES = 10
 
@@ -187,6 +191,32 @@ def public_chat(request):
     except llm.LLMError as exc:
         return _public_error(str(exc), 400, origin)
 
+    if session.status in (PublicChatSession.Status.WAITING_HUMAN, PublicChatSession.Status.HUMAN_REPLIED):
+        next_seq = (session.messages.aggregate(top=Max("seq"))["top"] or 0) + 1
+        PublicChatMessage.objects.create(
+            session=session, seq=next_seq, role=PublicChatMessage.Role.USER, content=content
+        )
+        PublicChatSession.objects.filter(pk=session.pk).update(updated_at=timezone.now())
+
+        def waiting_stream():
+            yield sse("meta", {"version": session.version.version, "provider": "human", "model": "human"})
+            yield sse(
+                "done",
+                {
+                    "id": None,
+                    "text": "",
+                    "citations": [],
+                    "is_fallback": False,
+                    "handoff_status": session.status,
+                    "usage": monthly_usage(session.account),
+                },
+            )
+
+        response = StreamingHttpResponse(waiting_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return _cors(response, origin)
+
     if not PublicChatSession.objects.filter(pk=session.pk, is_generating=False).update(is_generating=True):
         return _public_error("A reply is already being generated for this visitor.", 409, origin)
     if not reserve_monthly_message(session.account):
@@ -219,7 +249,6 @@ def public_chat(request):
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
     return _cors(response, origin)
-
 
 def origin_is_allowed_for_any_account(origin):
     from .models import AllowedWebsite
@@ -300,6 +329,7 @@ def stream_public_reply(session, history, content, provider, reply_seq):
                     "citations": assistant.citations,
                     "is_fallback": event["is_fallback"],
                     "suggest_handoff": suggest_handoff,
+                    "handoff_status": session.status,
                     "usage": monthly_usage(session.account),
                 },
             )
@@ -365,6 +395,15 @@ def public_message_feedback(request, message_id):
 
 
 
+def _send_handoff_email(account_email, subject, body):
+    try:
+        from django.core.mail import send_mail
+
+        send_mail(subject=subject, message=body, from_email=None, recipient_list=[account_email], fail_silently=True)
+    except Exception:
+        logger.exception("Could not send handoff email to %s", account_email)
+
+
 @csrf_exempt
 def request_handoff(request):
     origin = _request_origin(request)
@@ -394,27 +433,76 @@ def request_handoff(request):
     data = read_json(request) or {}
     reason = str(data.get("reason", "")).strip()[:1000]
 
-    existing_open = HandoffRequest.objects.filter(session=session, status=HandoffRequest.Status.OPEN).first()
-    if existing_open:
-        return _cors(JsonResponse({"message": "A human has already been requested for this chat."}), origin)
+    existing = HandoffRequest.objects.filter(
+        session=session, status__in=(HandoffRequest.Status.WAITING, HandoffRequest.Status.REPLIED)
+    ).first()
+    if existing:
+        return _cors(
+            JsonResponse({"message": "A human has already been notified for this chat.", "status": existing.status}),
+            origin,
+        )
 
     handoff = HandoffRequest.objects.create(session=session, account=session.account, reason=reason)
+    PublicChatSession.objects.filter(pk=session.pk).update(status=PublicChatSession.Status.WAITING_HUMAN)
+
+    _send_handoff_email(
+        session.account.email,
+        f"A visitor requested a human — {session.visitor_name}",
+        (
+            f"{session.visitor_name} ({session.visitor_email}) asked for a human in your chatbot.\n\n"
+            f"Reason given: {reason or '(none provided)'}\n\n"
+            f"Reply from your dashboard under the Handoffs tab. If you don't reply within 10 minutes "
+            f"you'll get a reminder; after 30 minutes the bot resumes automatically."
+        ),
+    )
+
+    return _cors(
+        JsonResponse({"message": "A team member will follow up shortly.", "status": "waiting"}, status=201), origin
+    )
+
+
+@csrf_exempt
+def poll_messages(request):
+    """Lets a visitor's browser check for new messages (human replies, the expiry notice) without sending one."""
+    origin = _request_origin(request)
+    if request.method != "GET":
+        return _public_error("Method not allowed.", 405, origin)
+    if origin is None:
+        return _public_error("A valid website Origin header is required.", 403)
+
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return _public_error("A visitor token is required.", 401, origin)
+    try:
+        token_data = signing.loads(
+            authorization[7:].strip(),
+            salt=VISITOR_TOKEN_SALT,
+            max_age=int(VISITOR_TOKEN_LIFETIME.total_seconds()),
+        )
+    except signing.BadSignature:
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+
+    session = PublicChatSession.objects.filter(token_id=token_data.get("session")).first()
+    if session is None or session.expires_at <= timezone.now():
+        return _public_error("The visitor token is invalid or expired.", 401, origin)
+    if origin != session.origin:
+        return _public_error("This website origin is not allowed for the chatbot.", 403, origin)
 
     try:
-        from django.core.mail import send_mail
+        after_seq = int(request.GET.get("after_seq", "0"))
+    except ValueError:
+        after_seq = 0
 
-        send_mail(
-            subject=f"A visitor requested a human — {session.visitor_name}",
-            message=(
-                f"{session.visitor_name} ({session.visitor_email}) asked for a human in your chatbot.\n\n"
-                f"Reason given: {reason or '(none provided)'}\n\n"
-                f"Review this conversation in your dashboard under the Handoffs tab."
-            ),
-            from_email=None,
-            recipient_list=[session.account.email],
-            fail_silently=True,
-        )
-    except Exception:
-        logger.exception("Could not send handoff notification email for handoff %s", handoff.pk)
-
-    return _cors(JsonResponse({"message": "A team member will follow up by email."}, status=201), origin)
+    messages = session.messages.filter(seq__gt=after_seq).order_by("seq")
+    return _cors(
+        JsonResponse(
+            {
+                "status": session.status,
+                "messages": [
+                    {"seq": m.seq, "role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
+                    for m in messages
+                ],
+            }
+        ),
+        origin,
+    )
