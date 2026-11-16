@@ -368,16 +368,21 @@ class PurgeHeartbeatAdmin(admin.ModelAdmin):
     
 @admin.register(HandoffRequest)
 class HandoffRequestAdmin(admin.ModelAdmin):
-    list_display = ("account", "session_visitor", "status", "created_at", "resolved_at")
+    list_display = ("account", "session_visitor", "status", "created_at", "reminder_sent_at", "replied_at", "resolved_at")
     list_filter = ("status", "created_at")
     search_fields = ("account__email", "session__visitor_name", "session__visitor_email")
     list_select_related = ("account", "session")
     actions = ["mark_resolved"]
 
-    fields = ("account", "session", "reason", "status", "created_at", "resolved_at")
-    readonly_fields = ("account", "session", "reason", "created_at", "resolved_at")
+    fields = (
+        "account", "session", "reason", "status", "created_at", "reminder_sent_at", "replied_at", "resolved_at",
+    )
+    readonly_fields = fields
 
     def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     @admin.display(description="Visitor")
@@ -388,12 +393,16 @@ class HandoffRequestAdmin(admin.ModelAdmin):
     def mark_resolved(self, request, queryset):
         from django.utils import timezone
 
-        count = queryset.filter(status=HandoffRequest.Status.OPEN).update(
-            status=HandoffRequest.Status.RESOLVED, resolved_at=timezone.now()
-        )
+        from .models import PublicChatSession
+
+        open_statuses = (HandoffRequest.Status.WAITING, HandoffRequest.Status.REPLIED)
+        targets = list(queryset.filter(status__in=open_statuses))
+        count = len(targets)
+        now = timezone.now()
+        for h in targets:
+            PublicChatSession.objects.filter(pk=h.session_id).update(status=PublicChatSession.Status.ACTIVE)
+        queryset.filter(status__in=open_statuses).update(status=HandoffRequest.Status.RESOLVED, resolved_at=now)
         self.message_user(request, f"{count} request(s) marked resolved.", messages.SUCCESS)
-        
-        
         
 @admin.register(ChangelogEntry)
 class ChangelogEntryAdmin(admin.ModelAdmin):

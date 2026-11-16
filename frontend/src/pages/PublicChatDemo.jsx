@@ -33,6 +33,7 @@ export default function PublicChatDemo() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [usage, setUsage] = useState(null);
+  const [polling, setPolling] = useState(false);
 
   async function connect(event) {
     event.preventDefault();
@@ -55,6 +56,47 @@ export default function PublicChatDemo() {
       setBusy(false);
     }
   }
+
+  async function requestHuman() {
+    try {
+      await fetch("/api/public/handoff/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + visitorToken },
+        body: JSON.stringify({ reason: "" }),
+      });
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: "I've let our team know — they'll jump in here shortly.", citations: [] },
+      ]);
+      setPolling(true);
+    } catch {
+      setError("Could not request a human right now.");
+    }
+  }
+
+  useEffect(() => {
+    if (!polling || !visitorToken) return undefined;
+    let lastSeq = messages.length;
+    const timer = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/public/chat/poll/?after_seq=${lastSeq}`, {
+          headers: { Authorization: "Bearer " + visitorToken },
+        });
+        const data = await response.json();
+        (data.messages || []).forEach((m) => {
+          lastSeq = m.seq;
+          if (m.role === "human" || m.role === "system") {
+            setMessages((current) => [...current, { role: "assistant", content: m.content, citations: [] }]);
+          }
+        });
+        if (data.status === "active") setPolling(false);
+      } catch {
+        /* retry on next tick */
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polling, visitorToken]);
 
   async function send(event) {
     event.preventDefault();
@@ -213,6 +255,9 @@ export default function PublicChatDemo() {
             <input value={content} maxLength={1000} onChange={(event) => setContent(event.target.value)} placeholder="Ask a question about the published bot…" aria-label="Message" disabled={busy} />
             <button type="submit" className="button" disabled={busy || !content.trim()}>{busy ? "Replying…" : "Send"}</button>
           </form>
+          <button type="button" className="link-button" style={{ marginTop: "0.6rem" }} onClick={requestHuman} disabled={polling}>
+            {polling ? "Waiting for a human…" : "Talk to a human"}
+          </button>
           {usage && <p className="field-hint">Monthly public messages: {usage.used} / {usage.limit}</p>}
         </section>
       )}

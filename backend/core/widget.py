@@ -97,12 +97,49 @@ WIDGET_JS = r"""
       });
   }
 
+  var pollTimer = null;
+  var lastSeq = 0;
+
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(function() {
+      fetch(apiBase + '/api/public/chat/poll/?after_seq=' + lastSeq, {
+        headers: { 'Authorization': 'Bearer ' + state.token }
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        (data.messages || []).forEach(function(m) {
+          lastSeq = m.seq;
+          if (m.role === 'human' || m.role === 'system') addMessage('assistant', m.content);
+        });
+        if (data.status === 'active') stopPolling();
+      }).catch(function() {});
+    }, 5000);
+  }
+
+  function requestHuman() {
+    fetch(apiBase + '/api/public/handoff/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+      body: JSON.stringify({ reason: '' })
+    }).then(function(r) { return r.json(); }).then(function() {
+      addMessage('assistant', "I've let our team know — they'll jump in here shortly.");
+      startPolling();
+    }).catch(function() {});
+  }
+
   function renderChatInput() {
     formArea.innerHTML = '';
-    var input = el('input', { placeholder: 'Type your question...', style: inputStyle() });
-    var send = el('button', { style: btnStyle(), onclick: function() { var v = input.value.trim(); if (v) { input.value = ''; sendMessage(v); } } }, ['Send']);
+    var row = el('div', { style: 'display:flex;gap:6px;' });
+    var input = el('input', { placeholder: 'Type your question...', style: inputStyle() + 'flex:1;' });
+    var send = el('button', { style: btnStyle() + 'width:auto;margin-top:0;', onclick: function() { var v = input.value.trim(); if (v) { input.value = ''; sendMessage(v); } } }, ['Send']);
     input.addEventListener('keydown', function(e) { if (e.key === 'Enter') send.click(); });
-    formArea.appendChild(input); formArea.appendChild(send);
+    row.appendChild(input); row.appendChild(send);
+    var humanBtn = el('button', {
+      style: 'margin-top:8px;background:none;border:none;color:#2b45f5;font-size:12px;cursor:pointer;text-decoration:underline;padding:0;',
+      onclick: requestHuman
+    }, ['Talk to a human']);
+    formArea.appendChild(row); formArea.appendChild(humanBtn);
   }
 
   function renderStarters(questions) {
@@ -127,6 +164,7 @@ WIDGET_JS = r"""
   }
 
   function sendMessage(text) {
+    lastSeq += 1;
     addMessage('user', text);
     var bubble = addMessage('assistant', '\u2026');
     fetch(apiBase + '/api/public/chat/', {
@@ -155,8 +193,15 @@ WIDGET_JS = r"""
             if (!data) continue;
             var payload;
             try { payload = JSON.parse(data); } catch (e) { continue; }
-            if (eventName === 'token') { full += payload.text; bubble.textContent = full; body.scrollTop = body.scrollHeight; }
-            else if (eventName === 'done') { bubble.textContent = payload.text; }
+        if (eventName === 'token') { full += payload.text; bubble.textContent = full; body.scrollTop = body.scrollHeight; }
+            else if (eventName === 'done') {
+              if (payload.handoff_status === 'waiting_human' || payload.handoff_status === 'human_replied') {
+                bubble.textContent = "A team member is handling this conversation — they'll reply here shortly.";
+                startPolling();
+              } else {
+                bubble.textContent = payload.text;
+              }
+            }
             else if (eventName === 'error') { bubble.textContent = payload.message; bubble.style.color = '#b91c1c'; }
           }
           return read();

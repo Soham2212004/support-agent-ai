@@ -61,6 +61,21 @@ services:
     volumes:
       - ./storage:/app/storage
 
+  # ---------- 2c. Celery beat (handoff reminder/expiry timers) ----------
+  beat:
+    build: ./backend
+    container_name: support_agent_beat
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=info
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
   # ---------- 3. React website (production build served by Nginx) ----------
   frontend:
     build: ./frontend

@@ -109,6 +109,12 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "check-handoff-timers": {
+        "task": "core.tasks.check_handoff_timers",
+        "schedule": 60.0,  # every minute
+    },
+}
 
 # ---- Public widget ----
 PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "").rstrip("/")

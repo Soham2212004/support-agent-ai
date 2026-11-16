@@ -207,14 +207,18 @@ class HandoffRequest(models.Model):
     """A visitor's request for a human, tied to a public chat session."""
 
     class Status(models.TextChoices):
-        OPEN = "open", "Open"
+        WAITING = "waiting", "Waiting"
+        REPLIED = "replied", "Replied"
         RESOLVED = "resolved", "Resolved"
+        EXPIRED = "expired", "Expired"
 
     session = models.ForeignKey("PublicChatSession", on_delete=models.CASCADE, related_name="handoff_requests")
     account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="handoff_requests")
     reason = models.TextField(blank=True, default="")
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.WAITING)
     created_at = models.DateTimeField(auto_now_add=True)
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    replied_at = models.DateTimeField(null=True, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -520,12 +524,19 @@ class AllowedWebsite(models.Model):
 class PublicChatSession(models.Model):
     """One visitor identity and transcript, retained for the configured retention period."""
 
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active (bot answers)"
+        WAITING_HUMAN = "waiting_human", "Waiting for a human"
+        HUMAN_REPLIED = "human_replied", "Human replied"
+        CLOSED = "closed", "Closed"
+
     token_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="public_chat_sessions")
     version = models.ForeignKey(PublishedBotVersion, on_delete=models.PROTECT, related_name="visitor_sessions")
     visitor_name = models.CharField(max_length=150)
     visitor_email = models.EmailField()
     origin = models.CharField(max_length=300)
+    status = models.CharField(max_length=15, choices=Status.choices, default=Status.ACTIVE)
     expires_at = models.DateTimeField()
     is_generating = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -540,6 +551,8 @@ class PublicChatMessage(models.Model):
     class Role(models.TextChoices):
         USER = "user", "User"
         ASSISTANT = "assistant", "Assistant"
+        HUMAN = "human", "Human"
+        SYSTEM = "system", "System"
 
     class Feedback(models.TextChoices):
         NONE = "none", "No feedback"
