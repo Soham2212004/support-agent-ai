@@ -36,7 +36,7 @@ def serialize_settings(settings):
     }
 
 @csrf_exempt
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def bot_settings(request):
     account = request.client_account
     settings = BotSettings.get_for_account(account)

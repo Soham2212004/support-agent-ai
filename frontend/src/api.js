@@ -68,6 +68,8 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
 export const api = {
   register: (form) => request("/register/", { method: "POST", body: form }),
   login: (email, password) => request("/login/", { method: "POST", body: { email, password } }),
+  verifyEmail: (token) => request("/verify-email/", { method: "POST", body: { token } }),
+  resendVerification: (email) => request("/resend-verification/", { method: "POST", body: { email } }),
   me: () => request("/me/", { auth: true }),
   getDocument: () => request("/document/", { auth: true }),
   uploadDocument: (file) => {

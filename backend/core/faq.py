@@ -43,7 +43,7 @@ def _queue_index(entry_id):
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def faq_list(request):
     account = request.client_account
 

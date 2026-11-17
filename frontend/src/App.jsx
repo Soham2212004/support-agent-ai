@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import ApiDocs from "./pages/ApiDocs.jsx";
 import PublicChatDemo from "./pages/PublicChatDemo.jsx";
 import StatusPage from "./pages/StatusPage.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="api-docs" element={<ApiDocs />} />
         <Route path="demo" element={<PublicChatDemo />} />
         <Route path="status" element={<StatusPage />} />
+        <Route path="verify-email" element={<VerifyEmail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

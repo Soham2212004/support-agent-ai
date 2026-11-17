@@ -42,7 +42,7 @@ def serialize_version(version):
 
 
 @require_GET
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def publication(request):
     account = request.client_account
     active = PublishedBotVersion.objects.filter(account=account, is_published=True).first()

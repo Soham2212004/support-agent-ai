@@ -66,9 +66,8 @@ def serialize_message(message):
         "model": message.llm_model,
         "feedback": message.feedback,
     }
-
 @require_GET
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def state(request):
     """Everything the chat box needs on load: readiness, the latest conversation, models, usage."""
     account = request.client_account

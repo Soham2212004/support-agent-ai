@@ -19,7 +19,7 @@ def _serialize(lead):
 
 
 @require_GET
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def lead_list(request):
     leads = Lead.objects.filter(account=request.client_account)
     return JsonResponse({"leads": [_serialize(lead) for lead in leads], "count": leads.count()})

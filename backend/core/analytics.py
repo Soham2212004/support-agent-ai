@@ -170,7 +170,7 @@ def _handle_export(request):
     return response
 
 
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def _handle(request):
     account = request.client_account
     cutoff = timezone.now() - timedelta(days=WINDOW_DAYS)

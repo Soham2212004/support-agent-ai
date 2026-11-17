@@ -1277,3 +1277,13 @@ button.button {
   gap: 0.6rem;
   margin-top: 0.6rem;
 }
+
+.status-banner-inline {
+  margin-bottom: 1.5rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 0.75rem;
+  background: #f3e8ff;
+  border: 1px solid #d8b4fe;
+  color: #6b21a8;
+  font-weight: 600;
+}

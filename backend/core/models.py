@@ -18,9 +18,11 @@ class ClientAccount(models.Model):
     """A visitor who registered on the website and is waiting for (or has had) admin review."""
 
     class Status(models.TextChoices):
+        UNVERIFIED = "unverified", "Unverified"
         PENDING = "pending", "Pending"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
+        SUSPENDED = "suspended", "Suspended"
 
     name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
@@ -31,10 +33,13 @@ class ClientAccount(models.Model):
     reason = models.TextField()
     password = models.CharField(max_length=128)
 
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.UNVERIFIED)
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True, editable=False)
     rejected_at = models.DateTimeField(null=True, blank=True, editable=False)
+    email_verified_at = models.DateTimeField(null=True, blank=True, editable=False)
+    suspended_at = models.DateTimeField(null=True, blank=True, editable=False)
+    suspension_reason = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
@@ -51,10 +56,9 @@ class ClientAccount(models.Model):
     def check_password(self, raw_password):
         return check_password(raw_password, self.password)
 
-    # ---- review timestamps are kept in sync with the status ----
     def save(self, *args, **kwargs):
         now = timezone.now()
-        if self.status == self.Status.PENDING:
+        if self.status in (self.Status.UNVERIFIED, self.Status.PENDING):
             self.reviewed_at = None
             self.rejected_at = None
         else:
@@ -65,6 +69,12 @@ class ClientAccount(models.Model):
                     self.rejected_at = now
             else:
                 self.rejected_at = None
+
+        if self.status == self.Status.SUSPENDED:
+            if self.suspended_at is None:
+                self.suspended_at = now
+        else:
+            self.suspended_at = None
         super().save(*args, **kwargs)
 
     @property
