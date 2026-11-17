@@ -340,6 +340,47 @@ class DocumentArchive(models.Model):
         verbose_name_plural = "document versions (archived)"
 
 
+class Lead(models.Model):
+    """One visitor identity per client, tracked across every conversation they've had with the bot."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="leads")
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    conversation_count = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["-last_seen_at"]
+        verbose_name = "lead"
+        verbose_name_plural = "leads"
+        constraints = [
+            models.UniqueConstraint(fields=["account", "email"], name="unique_lead_per_account_email"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} <{self.email}> ({self.account.company_name})"
+
+
+class LlmSpend(models.Model):
+    """One row per UTC day. Tracks estimated LLM cost and drives the global daily budget switch."""
+
+    date = models.DateField(unique=True)
+    input_tokens = models.PositiveBigIntegerField(default=0)
+    output_tokens = models.PositiveBigIntegerField(default=0)
+    estimated_cost = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    budget_limit = models.DecimalField(max_digits=10, decimal_places=2, default=5)
+    paused = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "LLM daily spend"
+        verbose_name_plural = "LLM daily spend"
+
+    def __str__(self):
+        return f"{self.date}: ${self.estimated_cost} / ${self.budget_limit}"
+
+
 class ChatUsage(models.Model):
     """How many test messages a client has used on one (UTC) day. Enforces the daily limit."""
 

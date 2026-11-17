@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 
 from django.core import signing
 from django.core.exceptions import ValidationError
+from django.db import models
 from django.core.validators import validate_email
 from django.db import DatabaseError, transaction
 from django.db.models import Max
@@ -17,6 +18,7 @@ from . import llm, rag
 from .api import error, read_json
 from .models import (
     HandoffRequest,
+    Lead,
     PublicChatMessage,
     PublicChatSession,
 )
@@ -116,6 +118,14 @@ def visitor_token(request):
         origin=origin,
         expires_at=expires_at,
     )
+
+    lead, created = Lead.objects.get_or_create(
+        account=key.account, email=email, defaults={"name": name}
+    )
+    if not created:
+        Lead.objects.filter(pk=lead.pk).update(
+            name=name, conversation_count=models.F("conversation_count") + 1
+        )
     token = signing.dumps(
         {"session": str(session.token_id), "version": version.pk},
         salt=VISITOR_TOKEN_SALT,

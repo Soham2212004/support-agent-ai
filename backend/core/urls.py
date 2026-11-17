@@ -1,14 +1,18 @@
 from django.urls import path
 
-from . import analytics, api, bot_settings, chat, documents, faq, gdpr, handoffs, public_api, publishing, status
-
+from . import account_export, analytics, api, bot_settings, chat, documents, faq, gdpr, handoffs, health, leads, public_api, publishing, status
 urlpatterns = [
+    path("health/", health.health, name="api-health"),
     path("register/", api.register, name="api-register"),
     path("login/", api.login, name="api-login"),
     path("me/", api.me, name="api-me"),
+    path("account/export.zip", account_export.export_account, name="api-account-export"),
+    path("account/delete/", account_export.delete_account, name="api-account-delete"),
     path("analytics/", analytics.analytics, name="api-analytics"),
     path("analytics/export.csv", analytics.export_csv, name="api-analytics-export"),
     path("analytics/downvote-note/", analytics.save_downvote_note, name="api-downvote-note"),
+    path("leads/", leads.lead_list, name="api-leads"),
+    path("leads/export.csv", leads.lead_export_csv, name="api-leads-export"),
     path("document/", documents.document, name="api-document"),
     path("document/reindex/", documents.reindex, name="api-document-reindex"),
     path("document/search/", documents.search, name="api-document-search"),

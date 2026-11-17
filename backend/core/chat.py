@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import llm, rag
 from .api import client_required, error, read_json
+from .llm_budget import is_budget_paused, record_usage
 from .models import BotSettings, ChatUsage, ClientDocument, Conversation, Message
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,13 @@ def send_message(request):
     if len(content) > MAX_MESSAGE_CHARS:
         return error(f"Keep your message under {MAX_MESSAGE_CHARS} characters.", 400)
 
+    if is_budget_paused():
+        return error(
+            "Test chat is temporarily paused because today's shared AI budget has been reached. "
+            "It resets at midnight UTC.",
+            503,
+        )
+
     document = ClientDocument.objects.filter(account=account).first()
     if document is None:
         return error("Upload a document first.", 409)
@@ -196,6 +204,8 @@ def stream_reply(account, document, conversation, history, content, provider, re
                 provider=provider["id"], llm_model=provider["model"],
                 tokens_in=event["tokens_in"], tokens_out=event["tokens_out"],
             )
+            if provider["id"] != "fake":
+                record_usage(event["tokens_in"], event["tokens_out"])
             Conversation.objects.filter(pk=conversation.pk).update(updated_at=timezone.now())
             finished = True
             yield sse(
