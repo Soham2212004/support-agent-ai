@@ -305,7 +305,6 @@ export default function Publishing() {
         )}
       </div>
 
-// With this:
       <div className="publish-section">
         <h3>Widget</h3>
         <p className="upload-help">

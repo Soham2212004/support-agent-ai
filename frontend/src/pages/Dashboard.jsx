@@ -7,6 +7,8 @@ import BotSettings from "../components/BotSettings.jsx";
 import Publishing from "../components/Publishing.jsx";
 import Analytics from "../components/Analytics.jsx";
 import HandoffRequests from "../components/HandoffRequests.jsx";
+import Leads from "../components/Leads.jsx";
+import AccountSettings from "../components/AccountSettings.jsx";
 import OnboardingChecklist from "../components/OnboardingChecklist.jsx";
 
 export default function Dashboard() {
@@ -145,8 +147,23 @@ export default function Dashboard() {
         >
           Handoffs{handoffCount > 0 && <span className="tab-badge">{handoffCount}</span>}
         </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "leads" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("leads")}
+          aria-current={activeTab === "leads" ? "page" : undefined}
+        >
+          Leads
+        </button>
+        <button
+          type="button"
+          className={`dash-tab ${activeTab === "account" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("account")}
+          aria-current={activeTab === "account" ? "page" : undefined}
+        >
+          Account
+        </button>
       </nav>
-
       {activeTab === "chat" && (
         <>
           <OnboardingChecklist />
@@ -158,6 +175,8 @@ export default function Dashboard() {
       {activeTab === "publish" && <Publishing />}
       {activeTab === "analytics" && <Analytics />}
       {activeTab === "handoffs" && <HandoffRequests onCountChange={setHandoffCount} />}
+      {activeTab === "leads" && <Leads />}
+      {activeTab === "account" && <AccountSettings />}
     </main>
   );
 }

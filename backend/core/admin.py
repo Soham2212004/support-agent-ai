@@ -15,6 +15,8 @@ from .models import (
     FAQEntry,
     HandoffRequest,
     IndexingLog,
+    Lead,
+    LlmSpend,
     PurgeHeartbeat,
 )
 
@@ -450,3 +452,36 @@ class DocumentArchiveAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+    
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "account", "conversation_count", "first_seen_at", "last_seen_at")
+    list_filter = ("first_seen_at",)
+    search_fields = ("name", "email", "account__email", "account__company_name")
+    list_select_related = ("account",)
+    readonly_fields = [f.name for f in Lead._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+    
+@admin.register(LlmSpend)
+class LlmSpendAdmin(admin.ModelAdmin):
+    list_display = ("date", "estimated_cost", "budget_limit", "input_tokens", "output_tokens", "status_badge")
+    list_filter = ("paused",)
+    ordering = ("-date",)
+    fields = ("date", "input_tokens", "output_tokens", "estimated_cost", "budget_limit", "paused")
+    readonly_fields = ("date", "input_tokens", "output_tokens", "estimated_cost")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Status")
+    def status_badge(self, obj):
+        color, label = ("#b91c1c", "PAUSED") if obj.paused else ("#15803d", "OK")
+        return format_html('<strong style="color:{}">{}</strong>', color, label)
