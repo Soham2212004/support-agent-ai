@@ -21,12 +21,13 @@ MAX_MESSAGE_CHARS = 1000
 HISTORY_MESSAGES = 10
 
 
-def daily_limit():
+def daily_limit(account=None):
+    if account is not None and account.plan_id:
+        return account.plan.daily_test_messages
     try:
         return int(os.environ.get("CHAT_DAILY_LIMIT", "50"))
     except ValueError:
         return 50
-
 
 def today():
     return timezone.now().date()  # UTC day
@@ -40,7 +41,7 @@ def used_today(account):
 def reserve_message(account):
     """Count one message against today's limit. False when the limit is already reached."""
     ChatUsage.objects.get_or_create(account=account, day=today())
-    changed = ChatUsage.objects.filter(account=account, day=today(), count__lt=daily_limit()).update(
+    changed = ChatUsage.objects.filter(account=account, day=today(), count__lt=daily_limit(account)).update(
         count=F("count") + 1
     )
     return changed == 1
@@ -85,7 +86,7 @@ def state(request):
             "document_name": document.original_filename if document else "",
             "conversation_id": conversation.pk if conversation else None,
             "messages": messages,
-            "usage": {"used": used_today(account), "limit": daily_limit()},
+            "usage": {"used": used_today(account), "limit": daily_limit(account)},
             "providers": [
                 {"id": p["id"], "label": p["label"], "model": p["model"]} for p in llm.available_providers()
             ],
@@ -146,7 +147,7 @@ def send_message(request):
 
     if not reserve_message(account):
         return error(
-            f"You've reached today's limit of {daily_limit()} test messages. It resets at midnight UTC.", 429
+            f"You've reached today's limit of {daily_limit(account)} test messages. It resets at midnight UTC.", 429
         )
 
     if conversation is None:
@@ -214,7 +215,7 @@ def stream_reply(account, document, conversation, history, content, provider, re
                     "text": message.content,
                     "citations": message.citations,
                     "is_fallback": message.is_fallback,
-                    "usage": {"used": used_today(account), "limit": daily_limit()},
+            "usage": {"used": used_today(account), "limit": daily_limit(account)},
                 },
             )
             return

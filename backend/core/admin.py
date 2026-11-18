@@ -8,6 +8,7 @@ from .models import (
     ChangelogEntry,
     ClientAccount,
     ClientDocument,
+    ContactMessage,
     DocumentArchive,
     DocumentChunk,
     BotSettings,
@@ -17,7 +18,9 @@ from .models import (
     IndexingLog,
     Lead,
     LlmSpend,
+    Plan,
     PurgeHeartbeat,
+    UpgradeRequest,
 )
 
 
@@ -66,7 +69,8 @@ for model in (User, Group):
 
 @admin.register(ClientAccount)
 class ClientAccountAdmin(admin.ModelAdmin):
-    list_display = ("name", "email", "company_name", "role", "status_badge", "created_at")
+    list_display = ("name", "email", "company_name", "role", "plan", "status_badge", "created_at")
+    list_editable = ()
     list_filter = ("status", "created_at")
     search_fields = ("name", "email", "company_name")
     actions = ["approve_selected", "reject_selected", "suspend_selected", "unsuspend_selected"]
@@ -77,7 +81,7 @@ class ClientAccountAdmin(admin.ModelAdmin):
         ("Company", {"fields": ("company_name", "website", "company_description", "reason")}),
         (
             "Review",
-            {"fields": ("status", "created_at", "reviewed_at", "rejected_at", "email_verified_at", "auto_delete_on")},
+            {"fields": ("status", "plan", "created_at", "reviewed_at", "rejected_at", "email_verified_at", "auto_delete_on")},
         ),
         ("Suspension", {"fields": ("suspended_at", "suspension_reason")}),
     )
@@ -519,3 +523,62 @@ class LlmSpendAdmin(admin.ModelAdmin):
     def status_badge(self, obj):
         color, label = ("#b91c1c", "PAUSED") if obj.paused else ("#15803d", "OK")
         return format_html('<strong style="color:{}">{}</strong>', color, label)
+    
+@admin.register(Plan)
+class PlanAdmin(admin.ModelAdmin):
+    list_display = ("name", "key", "monthly_messages", "daily_test_messages", "max_documents", "max_faq_entries")
+
+
+@admin.register(UpgradeRequest)
+class UpgradeRequestAdmin(admin.ModelAdmin):
+    list_display = ("account", "requested_plan", "status", "created_at", "handled_at")
+    list_filter = ("status", "requested_plan", "created_at")
+    search_fields = ("account__email", "account__company_name")
+    list_select_related = ("account", "requested_plan")
+    actions = ["mark_done", "mark_declined"]
+
+    fields = ("account", "requested_plan", "message", "status", "created_at", "handled_at")
+    readonly_fields = ("account", "requested_plan", "message", "created_at", "handled_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Mark done (and apply the plan change)")
+    def mark_done(self, request, queryset):
+        from django.utils import timezone
+
+        count = 0
+        for req in queryset.filter(status=UpgradeRequest.Status.OPEN):
+            req.account.plan = req.requested_plan
+            req.account.save(update_fields=["plan"])
+            req.status = UpgradeRequest.Status.DONE
+            req.handled_at = timezone.now()
+            req.save(update_fields=["status", "handled_at"])
+            count += 1
+        self.message_user(request, f"{count} request(s) applied and marked done.", messages.SUCCESS)
+
+    @admin.action(description="Decline selected requests")
+    def mark_declined(self, request, queryset):
+        from django.utils import timezone
+
+        count = queryset.filter(status=UpgradeRequest.Status.OPEN).update(
+            status=UpgradeRequest.Status.DECLINED, handled_at=timezone.now()
+        )
+        self.message_user(request, f"{count} request(s) declined.", messages.SUCCESS)
+
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "handled", "created_at")
+    list_filter = ("handled", "created_at")
+    search_fields = ("name", "email", "message")
+    actions = ["mark_handled"]
+    readonly_fields = ("name", "email", "message", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Mark selected messages handled")
+    def mark_handled(self, request, queryset):
+        count = queryset.update(handled=True)
+        self.message_user(request, f"{count} message(s) marked handled.", messages.SUCCESS)

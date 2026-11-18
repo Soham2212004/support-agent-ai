@@ -1,6 +1,23 @@
 from django.urls import path
 
-from . import account_export, analytics, api, bot_settings, chat, documents, faq, gdpr, handoffs, health, leads, public_api, publishing, status
+from . import (
+    account_export,
+    analytics,
+    api,
+    bot_settings,
+    chat,
+    documents,
+    faq,
+    gdpr,
+    handoffs,
+    health,
+    leads,
+    public_api,
+    public_pages,
+    publishing,
+    status,
+    upgrades,
+)
 urlpatterns = [
     path("health/", health.health, name="api-health"),
     path("register/", api.register, name="api-register"),
@@ -10,6 +27,9 @@ urlpatterns = [
     path("resend-verification/", api.resend_verification, name="api-resend-verification"),
     path("account/export.zip", account_export.export_account, name="api-account-export"),
     path("account/delete/", account_export.delete_account, name="api-account-delete"),
+    path("upgrade-request/", upgrades.request_upgrade, name="api-upgrade-request"),
+    path("public/config/", public_pages.public_config, name="api-public-config"),
+    path("public/contact/", public_pages.contact, name="api-public-contact"),
     path("analytics/", analytics.analytics, name="api-analytics"),
     path("analytics/export.csv", analytics.export_csv, name="api-analytics-export"),
     path("analytics/downvote-note/", analytics.save_downvote_note, name="api-downvote-note"),

@@ -30,6 +30,7 @@ export default function Layout() {
         <nav className="nav" aria-label="Main">
           <a href="/#what">What it does</a>
           <a href="/#how">How it works</a>
+          <Link to="/pricing">Pricing</Link>
           {signedIn ? (
             <>
               <Link className="nav-keep" to="/dashboard">
@@ -57,7 +58,8 @@ export default function Layout() {
       <footer className="site-footer">
         <span>© 2026 Support Agent AI</span>
         <span>
-          <Link to="/status">Status</Link> · <a href="mailto:hello@supportagent.ai">hello@supportagent.ai</a>
+          <Link to="/status">Status</Link> · <Link to="/terms">Terms</Link> · <Link to="/privacy">Privacy</Link> ·{" "}
+          <Link to="/contact">Contact</Link> · <a href="mailto:hello@supportagent.ai">hello@supportagent.ai</a>
         </span>
       </footer>
     </>

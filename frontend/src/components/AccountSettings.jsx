@@ -8,6 +8,24 @@ export default function AccountSettings() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [upgradeMessage, setUpgradeMessage] = useState("");
+  const [upgradeNotice, setUpgradeNotice] = useState("");
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+
+  async function requestUpgrade(e) {
+    e.preventDefault();
+    setUpgradeBusy(true);
+    setUpgradeNotice("");
+    try {
+      const res = await api.requestUpgrade("pro", upgradeMessage);
+      setUpgradeNotice(res.message);
+      setUpgradeMessage("");
+    } catch (err) {
+      setUpgradeNotice(err.message || "Could not send the request.");
+    } finally {
+      setUpgradeBusy(false);
+    }
+  }
 
   async function exportZip(e) {
     e.preventDefault();
@@ -57,6 +75,32 @@ export default function AccountSettings() {
         <a className="button button-ghost" href="/api/account/export.zip" onClick={exportZip}>
           Export all my data (.zip)
         </a>
+      </div>
+
+      <div className="publish-section">
+        <h3>Request an upgrade</h3>
+        <p className="upload-help">Need a higher message limit? Send a request — we'll follow up by email.</p>
+        <form className="form" onSubmit={requestUpgrade} style={{ marginTop: "1rem" }}>
+          <div className="field">
+            <label htmlFor="upgrade-message">Message (optional)</label>
+            <textarea
+              id="upgrade-message"
+              rows={2}
+              maxLength={1000}
+              value={upgradeMessage}
+              onChange={(e) => setUpgradeMessage(e.target.value)}
+              disabled={upgradeBusy}
+            />
+          </div>
+          <button className="button button-small" type="submit" disabled={upgradeBusy}>
+            Request Pro plan
+          </button>
+          {upgradeNotice && (
+            <p className="notice" role="status">
+              {upgradeNotice}
+            </p>
+          )}
+        </form>
       </div>
 
       <div className="publish-section">

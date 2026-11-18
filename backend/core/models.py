@@ -14,6 +14,30 @@ from .storage import delete_file
 REJECTED_RETENTION_DAYS = 183
 
 
+class Plan(models.Model):
+    """A named set of limits. Staff move clients between plans manually — no billing."""
+
+    class Key(models.TextChoices):
+        FREE = "free", "Free"
+        PRO = "pro", "Pro"
+        INTERNAL = "internal", "Internal"
+
+    key = models.CharField(max_length=10, choices=Key.choices, unique=True)
+    name = models.CharField(max_length=50)
+    monthly_messages = models.PositiveIntegerField()
+    daily_test_messages = models.PositiveIntegerField(default=50)
+    max_documents = models.PositiveIntegerField(default=1)
+    max_faq_entries = models.PositiveIntegerField(default=50)
+
+    class Meta:
+        ordering = ["monthly_messages"]
+        verbose_name = "plan"
+        verbose_name_plural = "plans"
+
+    def __str__(self):
+        return self.name
+
+
 class ClientAccount(models.Model):
     """A visitor who registered on the website and is waiting for (or has had) admin review."""
 
@@ -34,6 +58,7 @@ class ClientAccount(models.Model):
     password = models.CharField(max_length=128)
 
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.UNVERIFIED)
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name="accounts", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True, editable=False)
     rejected_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -57,6 +82,9 @@ class ClientAccount(models.Model):
         return check_password(raw_password, self.password)
 
     def save(self, *args, **kwargs):
+        if self.plan_id is None:
+            self.plan = Plan.objects.filter(key=Plan.Key.FREE).first()
+
         now = timezone.now()
         if self.status in (self.Status.UNVERIFIED, self.Status.PENDING):
             self.reviewed_at = None
@@ -635,6 +663,61 @@ class PublicMonthlyUsage(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["account", "month"], name="unique_public_monthly_usage"),
+        ]
+
+
+class UpgradeRequest(models.Model):
+    """A client asking to move to a higher plan. No billing — staff action the request manually."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        DONE = "done", "Done"
+        DECLINED = "declined", "Declined"
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="upgrade_requests")
+    requested_plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name="upgrade_requests")
+    message = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    handled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "upgrade request"
+        verbose_name_plural = "upgrade requests"
+
+    def __str__(self):
+        return f"{self.account.company_name} → {self.requested_plan.name}"
+
+
+class ContactMessage(models.Model):
+    """A message from the public Contact form."""
+
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    message = models.TextField(max_length=2000)
+    handled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "contact message"
+        verbose_name_plural = "contact messages"
+
+    def __str__(self):
+        return f"{self.name} <{self.email}>"
+
+
+class UsageWarningLog(models.Model):
+    """Prevents sending the same 80%/100% usage warning twice in the same month."""
+
+    account = models.ForeignKey(ClientAccount, on_delete=models.CASCADE, related_name="usage_warnings")
+    month = models.DateField()
+    level = models.PositiveIntegerField()  # 80 or 100
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["account", "month", "level"], name="unique_usage_warning"),
         ]
 
 

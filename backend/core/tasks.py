@@ -16,6 +16,55 @@ def index_faq_entry_task(self, entry_id):
 
 
 @shared_task
+def check_usage_warnings():
+    """Runs on Celery beat. Emails a client once per month per threshold (80%, 100%) of their plan limit."""
+    import logging
+
+    from django.core.mail import send_mail
+
+    from .models import ClientAccount, PublicMonthlyUsage, UsageWarningLog
+    from .public_common import current_month, monthly_message_limit
+
+    logger = logging.getLogger(__name__)
+    month = current_month()
+
+    usages = PublicMonthlyUsage.objects.filter(month=month).select_related("account", "account__plan")
+    for usage in usages:
+        account = usage.account
+        if account.status != ClientAccount.Status.APPROVED:
+            continue
+        limit = monthly_message_limit(account)
+        if limit <= 0:
+            continue
+        pct = usage.count / limit * 100
+
+        for level in (100, 80):
+            if pct < level:
+                continue
+            already_sent = UsageWarningLog.objects.filter(account=account, month=month, level=level).exists()
+            if already_sent:
+                break  # don't also send the lower threshold once the higher one has fired
+            try:
+                send_mail(
+                    subject=f"You've used {level}% of this month's message limit",
+                    message=(
+                        f"Hi {account.name},\n\n"
+                        f"Your chatbot has used {usage.count} of {limit} messages this month "
+                        f"({round(pct)}%).\n\n"
+                        + ("Consider requesting an upgrade from your dashboard." if level == 80 else
+                           "Further visitor messages will be turned away until next month, or until you upgrade.")
+                    ),
+                    from_email=None,
+                    recipient_list=[account.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                logger.exception("Could not send usage warning email to %s", account.email)
+            UsageWarningLog.objects.get_or_create(account=account, month=month, level=level)
+            break
+
+
+@shared_task
 def check_handoff_timers():
     """Runs every minute (Celery beat): sends 10-minute reminders and expires handoffs after 30 minutes idle."""
     import logging

@@ -25,7 +25,7 @@ from .models import (
     PublishedBotVersion,
     PublicMonthlyUsage,
 )
-from .public_common import MONTHLY_MESSAGE_LIMIT, current_month, normalize_origin
+from .public_common import current_month, monthly_message_limit, normalize_origin
 
 KEY_GRACE_PERIOD = timedelta(hours=24)
 
@@ -56,12 +56,12 @@ def publication(request):
             "published": serialize_version(active) if active else None,
             "versions": [serialize_version(version) for version in versions],
             "document_ready": bool(document and document.index_status == ClientDocument.IndexStatus.READY),
-            "usage": {"used": usage.count if usage else 0, "limit": MONTHLY_MESSAGE_LIMIT},
+            "usage": {"used": usage.count if usage else 0, "limit": monthly_message_limit(account)},
             "widget_mode": bot_settings.widget_mode,
             "public_api_base_url": api_base,
+            "plan": {"key": account.plan.key, "name": account.plan.name} if account.plan else None,
         }
     )
-
 
 @csrf_exempt
 @require_POST

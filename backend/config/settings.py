@@ -114,8 +114,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.check_handoff_timers",
         "schedule": 60.0,  # every minute
     },
+    "check-usage-warnings": {
+        "task": "core.tasks.check_usage_warnings",
+        "schedule": 3600.0,  # hourly is plenty for a monthly threshold
+    },
 }
-
 # ---- Public widget ----
 PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "").rstrip("/")
 
