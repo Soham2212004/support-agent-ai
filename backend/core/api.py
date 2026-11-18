@@ -4,20 +4,62 @@ Authentication is a signed bearer token (no cookies), so it never clashes with t
 Django admin session and does not need CSRF protection.
 """
 import json
+import logging
+import os
 from functools import wraps
 
 from django.core import signing
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.core.validators import URLValidator, validate_email
 from django.db import IntegrityError
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import ClientAccount
 
+logger = logging.getLogger(__name__)
+
 TOKEN_SALT = "support-agent-ai.client"
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # sign-in lasts 7 days
+
+EMAIL_VERIFY_SALT = "support-agent-ai.email-verify"
+EMAIL_VERIFY_MAX_AGE = 60 * 60 * 24  # 24 hours
+
+# Common disposable/throwaway email providers. A local, free check — no external service.
+DISPOSABLE_EMAIL_DOMAINS = {
+    "mailinator.com", "tempmail.com", "temp-mail.org", "10minutemail.com",
+    "guerrillamail.com", "throwawaymail.com", "yopmail.com", "trashmail.com",
+    "fakeinbox.com", "sharklasers.com", "getnada.com", "dispostable.com",
+    "maildrop.cc", "mintemail.com", "mailnesia.com",
+}
+
+
+def make_verification_token(account):
+    return signing.dumps({"id": account.pk}, salt=EMAIL_VERIFY_SALT)
+
+
+def send_verification_email(account):
+    token = make_verification_token(account)
+    frontend_base = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000")
+    link = f"{frontend_base}/verify-email?token={token}"
+    try:
+        send_mail(
+            subject="Verify your email — Support Agent AI",
+            message=(
+                f"Hi {account.name},\n\n"
+                f"Click the link below to verify your email and move your request to review:\n\n"
+                f"{link}\n\n"
+                f"This link expires in 24 hours. If you didn't request this, ignore this email."
+            ),
+            from_email=None,
+            recipient_list=[account.email],
+            fail_silently=True,
+        )
+    except Exception:
+        logger.exception("Could not send verification email to %s", account.email)
 
 
 # ---------------------------------------------------------------- helpers
@@ -57,9 +99,12 @@ def serialize(account):
         "status": account.status,
     }
 
+def client_required(approved_only=False, allow_suspended_read=False):
+    """Decorator for dashboard API views. Use approved_only=True for anything beyond basic account info.
 
-def client_required(approved_only=False):
-    """Decorator for future API views. Use approved_only=True for dashboard data."""
+    allow_suspended_read=True lets a suspended account's GET requests through (read-only access and
+    data export stay available while suspended). Writes always require full approval.
+    """
 
     def decorator(view):
         @wraps(view)
@@ -68,7 +113,14 @@ def client_required(approved_only=False):
             if account is None:
                 return error("Please sign in.", 401)
             if approved_only and account.status != ClientAccount.Status.APPROVED:
-                return error("Your request has not been approved.", 403)
+                if allow_suspended_read and account.status == ClientAccount.Status.SUSPENDED and request.method == "GET":
+                    pass  # read-only access stays available while suspended
+                elif account.status == ClientAccount.Status.SUSPENDED:
+                    return error("Your account is suspended. You can still export your data.", 403)
+                elif account.status == ClientAccount.Status.UNVERIFIED:
+                    return error("Please verify your email first.", 403)
+                else:
+                    return error("Your request has not been approved.", 403)
             request.client_account = account
             return view(request, *args, **kwargs)
 
@@ -110,6 +162,10 @@ def register(request):
             validate_email(cleaned["email"])
         except ValidationError:
             errors["email"] = "Enter a valid email address."
+        else:
+            domain = cleaned["email"].rsplit("@", 1)[-1]
+            if domain in DISPOSABLE_EMAIL_DOMAINS:
+                errors["email"] = "Please use a permanent email address, not a disposable one."
 
     # website (add https:// if the person left it out)
     if "website" not in errors:
@@ -155,7 +211,55 @@ def register(request):
     except IntegrityError:
         return error("Please fix the highlighted fields.", 400, {"email": "An account with this email already exists."})
 
-    return JsonResponse({"message": "Request received."}, status=201)
+    send_verification_email(account)
+    return JsonResponse({"message": "Check your email to verify your account."}, status=201)
+
+
+@csrf_exempt
+@require_POST
+def verify_email(request):
+    data = read_json(request)
+    if data is None:
+        return error("Invalid request.")
+    token = str(data.get("token", "")).strip()
+    if not token:
+        return error("A verification code is required.", 400)
+    try:
+        payload = signing.loads(token, salt=EMAIL_VERIFY_SALT, max_age=EMAIL_VERIFY_MAX_AGE)
+    except signing.BadSignature:
+        return error("This verification link is invalid or has expired.", 400)
+
+    account = ClientAccount.objects.filter(pk=payload.get("id")).first()
+    if account is None:
+        return error("This verification link is invalid or has expired.", 400)
+
+    if account.status == ClientAccount.Status.UNVERIFIED:
+        account.status = ClientAccount.Status.PENDING
+        account.email_verified_at = timezone.now()
+        account.save()
+
+    return JsonResponse(
+        {
+            "message": "Email verified. Your request is now pending approval.",
+            "token": make_token(account),
+            "account": serialize(account),
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def resend_verification(request):
+    data = read_json(request)
+    if data is None:
+        return error("Invalid request.")
+    email = str(data.get("email", "")).strip().lower()
+    account = ClientAccount.objects.filter(email=email, status=ClientAccount.Status.UNVERIFIED).first()
+    if account:
+        send_verification_email(account)
+    # Same response whether or not the account exists or is already verified, so this endpoint
+    # never reveals account state to a caller who doesn't already know the password.
+    return JsonResponse({"message": "If that email needs verifying, a new link has been sent."})
 
 
 @csrf_exempt

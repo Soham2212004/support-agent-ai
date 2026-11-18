@@ -57,7 +57,7 @@ def _archive_existing(document):
 
 @csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE"])
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def document(request):
     account = request.client_account
     existing = ClientDocument.objects.filter(account=account).first()
@@ -129,7 +129,7 @@ def document(request):
 
 
 @require_GET
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def version_history(request):
     archives = DocumentArchive.objects.filter(account=request.client_account)[:50]
     return JsonResponse(

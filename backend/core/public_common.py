@@ -20,9 +20,18 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-MONTHLY_MESSAGE_LIMIT = 1000
 VISITOR_MESSAGE_RATE = 10
 TOKEN_REQUEST_RATE = 10
+
+
+def monthly_message_limit(account):
+    """The account's own plan limit, falling back to the Free plan's limit if no plan is set."""
+    if account.plan_id:
+        return account.plan.monthly_messages
+    from .models import Plan
+
+    free = Plan.objects.filter(key=Plan.Key.FREE).first()
+    return free.monthly_messages if free else 200
 RATE_LIMIT_WINDOW_SECONDS = 70  # a little over a minute, so a key always outlives its own window
 
 _redis_client = None
@@ -116,14 +125,15 @@ def current_month():
 
 def reserve_monthly_message(account):
     month = current_month()
+    limit = monthly_message_limit(account)
     try:
         PublicMonthlyUsage.objects.get_or_create(account=account, month=month)
     except IntegrityError:
         pass
     return (
-        PublicMonthlyUsage.objects.filter(
-            account=account, month=month, count__lt=MONTHLY_MESSAGE_LIMIT
-        ).update(count=F("count") + 1)
+        PublicMonthlyUsage.objects.filter(account=account, month=month, count__lt=limit).update(
+            count=F("count") + 1
+        )
         == 1
     )
 
@@ -136,4 +146,4 @@ def release_monthly_message(account):
 
 def monthly_usage(account):
     row = PublicMonthlyUsage.objects.filter(account=account, month=current_month()).first()
-    return {"used": row.count if row else 0, "limit": MONTHLY_MESSAGE_LIMIT}
+    return {"used": row.count if row else 0, "limit": monthly_message_limit(account)}

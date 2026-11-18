@@ -11,6 +11,37 @@ import Leads from "../components/Leads.jsx";
 import AccountSettings from "../components/AccountSettings.jsx";
 import OnboardingChecklist from "../components/OnboardingChecklist.jsx";
 
+function ResendVerification({ email }) {
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  async function resend() {
+    setBusy(true);
+    setNotice("");
+    try {
+      await api.resendVerification(email);
+      setNotice("A new verification link has been sent.");
+    } catch (err) {
+      setNotice(err.message || "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      <button className="button button-ghost" type="button" onClick={resend} disabled={busy}>
+        {busy ? "Sending…" : "Resend verification email"}
+      </button>
+      {notice && (
+        <p className="notice" role="status" style={{ marginTop: "0.75rem" }}>
+          {notice}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [account, setAccount] = useState(null);
@@ -70,6 +101,18 @@ export default function Dashboard() {
 
   if (!account) return null;
 
+  if (account.status === "unverified") {
+    return (
+      <main className="page page-narrow">
+        <section className="status-panel status-pending" aria-live="polite">
+          <h1>Please verify your email</h1>
+          <p>We sent a verification link to {account.email}. Click it to continue.</p>
+          <ResendVerification email={account.email} />
+        </section>
+      </main>
+    );
+  }
+
   if (account.status === "pending") {
     return (
       <main className="page page-narrow">
@@ -99,8 +142,16 @@ export default function Dashboard() {
   }
 
   // approved
+  // approved or suspended — suspended still sees the dashboard read-only; writes are
+  // refused server-side with a clear message.
   return (
     <main className="page dash">
+      {account.status === "suspended" && (
+        <div className="status-banner-inline" role="alert">
+          Your account is suspended. You can still view and export your data, but publishing and
+          editing are turned off.
+        </div>
+      )}
       <div className="dash-head">
         <h1>Welcome, {account.name.split(" ")[0]}</h1>
         <p className="page-lede">{account.company_name}</p>

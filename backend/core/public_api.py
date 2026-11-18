@@ -23,10 +23,10 @@ from .models import (
     PublicChatSession,
 )
 from .public_common import (
-    MONTHLY_MESSAGE_LIMIT,
     TOKEN_REQUEST_RATE,
     VISITOR_MESSAGE_RATE,
     api_key_from_request,
+    monthly_message_limit,
     monthly_usage,
     normalize_origin,
     origin_is_allowed,
@@ -232,7 +232,7 @@ def public_chat(request):
     if not reserve_monthly_message(session.account):
         PublicChatSession.objects.filter(pk=session.pk).update(is_generating=False)
         return _public_error(
-            f"This chatbot has reached its monthly limit of {MONTHLY_MESSAGE_LIMIT} messages.",
+            f"This chatbot has reached its monthly limit of {monthly_message_limit(session.account)} messages.",
             429,
             origin,
         )

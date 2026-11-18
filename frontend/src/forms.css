@@ -1277,3 +1277,37 @@ button.button {
   gap: 0.6rem;
   margin-top: 0.6rem;
 }
+
+.status-banner-inline {
+  margin-bottom: 1.5rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 0.75rem;
+  background: #f3e8ff;
+  border: 1px solid #d8b4fe;
+  color: #6b21a8;
+  font-weight: 600;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.pricing-card {
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--white);
+}
+
+.pricing-card h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+
+.pricing-card .doc-bullets {
+  margin-bottom: 1.5rem;
+}

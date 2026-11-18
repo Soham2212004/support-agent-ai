@@ -33,7 +33,7 @@ export default function Login() {
 
       {registered && (
         <p className="notice" role="status">
-          Request received. Sign in with your email and password to check its status.
+          Check your email for a verification link, then sign in to continue.
         </p>
       )}
 

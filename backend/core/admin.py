@@ -8,6 +8,7 @@ from .models import (
     ChangelogEntry,
     ClientAccount,
     ClientDocument,
+    ContactMessage,
     DocumentArchive,
     DocumentChunk,
     BotSettings,
@@ -17,7 +18,9 @@ from .models import (
     IndexingLog,
     Lead,
     LlmSpend,
+    Plan,
     PurgeHeartbeat,
+    UpgradeRequest,
 )
 
 
@@ -66,21 +69,27 @@ for model in (User, Group):
 
 @admin.register(ClientAccount)
 class ClientAccountAdmin(admin.ModelAdmin):
-    list_display = ("name", "email", "company_name", "role", "status_badge", "created_at")
+    list_display = ("name", "email", "company_name", "role", "plan", "status_badge", "created_at")
+    list_editable = ()
     list_filter = ("status", "created_at")
     search_fields = ("name", "email", "company_name")
-    actions = ["approve_selected", "reject_selected"]
+    actions = ["approve_selected", "reject_selected", "suspend_selected", "unsuspend_selected"]
     date_hierarchy = "created_at"
 
     fieldsets = (
         ("Applicant", {"fields": ("name", "email", "role")}),
         ("Company", {"fields": ("company_name", "website", "company_description", "reason")}),
-        ("Review", {"fields": ("status", "created_at", "reviewed_at", "rejected_at", "auto_delete_on")}),
+        (
+            "Review",
+            {"fields": ("status", "plan", "created_at", "reviewed_at", "rejected_at", "email_verified_at", "auto_delete_on")},
+        ),
+        ("Suspension", {"fields": ("suspended_at", "suspension_reason")}),
     )
     # Everything the applicant typed is read-only; the admin only decides the status.
+    # suspension_reason stays editable so staff can note why before or after suspending.
     readonly_fields = (
         "name", "email", "role", "company_name", "website", "company_description", "reason",
-        "created_at", "reviewed_at", "rejected_at", "auto_delete_on",
+        "created_at", "reviewed_at", "rejected_at", "email_verified_at", "auto_delete_on", "suspended_at",
     )
 
     def has_add_permission(self, request):
@@ -88,7 +97,13 @@ class ClientAccountAdmin(admin.ModelAdmin):
 
     @admin.display(description="Status", ordering="status")
     def status_badge(self, obj):
-        colors = {"pending": "#b45309", "approved": "#15803d", "rejected": "#b91c1c"}
+        colors = {
+            "unverified": "#6b7280",
+            "pending": "#b45309",
+            "approved": "#15803d",
+            "rejected": "#b91c1c",
+            "suspended": "#9333ea",
+        }
         return format_html(
             '<strong style="color:{}">{}</strong>', colors.get(obj.status, "#444"), obj.get_status_display()
         )
@@ -98,22 +113,45 @@ class ClientAccountAdmin(admin.ModelAdmin):
         when = obj.auto_delete_on
         return when.strftime("%d %b %Y") if when else "-"
 
-    def _set_status(self, request, queryset, status, label):
-        count = 0
+    def _set_status(self, request, queryset, status, label, allowed_from=None):
+        count, skipped = 0, 0
         for obj in queryset.exclude(status=status):
+            if allowed_from and obj.status not in allowed_from:
+                skipped += 1
+                continue
             obj.status = status
-            obj.save()  # save() keeps the review timestamps correct
+            obj.save()  # save() keeps the review and suspension timestamps correct
             count += 1
-        self.message_user(request, f"{count} request(s) {label}.", messages.SUCCESS)
+        message = f"{count} request(s) {label}."
+        if skipped:
+            message += f" {skipped} skipped (wrong current status)."
+        self.message_user(request, message, messages.SUCCESS)
 
     @admin.action(description="Approve selected requests")
     def approve_selected(self, request, queryset):
-        self._set_status(request, queryset, ClientAccount.Status.APPROVED, "approved")
+        self._set_status(
+            request, queryset, ClientAccount.Status.APPROVED, "approved", allowed_from=[ClientAccount.Status.PENDING]
+        )
 
     @admin.action(description="Reject selected requests")
     def reject_selected(self, request, queryset):
-        self._set_status(request, queryset, ClientAccount.Status.REJECTED, "rejected")
+        self._set_status(
+            request, queryset, ClientAccount.Status.REJECTED, "rejected", allowed_from=[ClientAccount.Status.PENDING]
+        )
 
+    @admin.action(description="Suspend selected accounts")
+    def suspend_selected(self, request, queryset):
+        self._set_status(
+            request, queryset, ClientAccount.Status.SUSPENDED, "suspended",
+            allowed_from=[ClientAccount.Status.APPROVED],
+        )
+
+    @admin.action(description="Unsuspend selected accounts")
+    def unsuspend_selected(self, request, queryset):
+        self._set_status(
+            request, queryset, ClientAccount.Status.APPROVED, "unsuspended",
+            allowed_from=[ClientAccount.Status.SUSPENDED],
+        )
 
 @admin.register(ClientDocument)
 class ClientDocumentAdmin(AuditedViewMixin, admin.ModelAdmin):
@@ -485,3 +523,62 @@ class LlmSpendAdmin(admin.ModelAdmin):
     def status_badge(self, obj):
         color, label = ("#b91c1c", "PAUSED") if obj.paused else ("#15803d", "OK")
         return format_html('<strong style="color:{}">{}</strong>', color, label)
+    
+@admin.register(Plan)
+class PlanAdmin(admin.ModelAdmin):
+    list_display = ("name", "key", "monthly_messages", "daily_test_messages", "max_documents", "max_faq_entries")
+
+
+@admin.register(UpgradeRequest)
+class UpgradeRequestAdmin(admin.ModelAdmin):
+    list_display = ("account", "requested_plan", "status", "created_at", "handled_at")
+    list_filter = ("status", "requested_plan", "created_at")
+    search_fields = ("account__email", "account__company_name")
+    list_select_related = ("account", "requested_plan")
+    actions = ["mark_done", "mark_declined"]
+
+    fields = ("account", "requested_plan", "message", "status", "created_at", "handled_at")
+    readonly_fields = ("account", "requested_plan", "message", "created_at", "handled_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Mark done (and apply the plan change)")
+    def mark_done(self, request, queryset):
+        from django.utils import timezone
+
+        count = 0
+        for req in queryset.filter(status=UpgradeRequest.Status.OPEN):
+            req.account.plan = req.requested_plan
+            req.account.save(update_fields=["plan"])
+            req.status = UpgradeRequest.Status.DONE
+            req.handled_at = timezone.now()
+            req.save(update_fields=["status", "handled_at"])
+            count += 1
+        self.message_user(request, f"{count} request(s) applied and marked done.", messages.SUCCESS)
+
+    @admin.action(description="Decline selected requests")
+    def mark_declined(self, request, queryset):
+        from django.utils import timezone
+
+        count = queryset.filter(status=UpgradeRequest.Status.OPEN).update(
+            status=UpgradeRequest.Status.DECLINED, handled_at=timezone.now()
+        )
+        self.message_user(request, f"{count} request(s) declined.", messages.SUCCESS)
+
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "handled", "created_at")
+    list_filter = ("handled", "created_at")
+    search_fields = ("name", "email", "message")
+    actions = ["mark_handled"]
+    readonly_fields = ("name", "email", "message", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Mark selected messages handled")
+    def mark_handled(self, request, queryset):
+        count = queryset.update(handled=True)
+        self.message_user(request, f"{count} message(s) marked handled.", messages.SUCCESS)
