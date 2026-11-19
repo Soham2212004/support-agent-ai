@@ -10,3 +10,5 @@ pgvector>=0.3
 openai>=1.50
 redis>=5.0
 celery>=5.4
+langgraph==0.2.74
+langchain-core==0.3.63

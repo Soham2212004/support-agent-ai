@@ -15,8 +15,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV HF_HOME=/opt/hf-cache
 ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
 ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
+ARG RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+ENV RERANK_MODEL=${RERANK_MODEL}
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
+RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANK_MODEL}', device='cpu')"
 ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
+ENV TOKENIZERS_PARALLELISM=false
 
 COPY . .
 

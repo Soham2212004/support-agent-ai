@@ -32,6 +32,7 @@ export default function BotSettings({ onSave }) {
     starter_questions: ["", "", "", ""],
     escalation_email: "",
     avatar_url: "",
+    pipeline: "baseline",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,6 +57,7 @@ export default function BotSettings({ onSave }) {
         starter_questions: [...(data.starter_questions || []), "", "", "", ""].slice(0, 4),
         escalation_email: data.escalation_email || "",
         avatar_url: data.avatar_url || "",
+        pipeline: data.pipeline || "baseline",
       });
     } catch (err) {
       setError(err.message || "Failed to load bot settings.");
@@ -107,6 +109,7 @@ export default function BotSettings({ onSave }) {
           starter_questions: [...(res.settings.starter_questions || []), "", "", "", ""].slice(0, 4),
           escalation_email: res.settings.escalation_email || "",
           avatar_url: res.settings.avatar_url || "",
+          pipeline: res.settings.pipeline || "baseline",
         });
       }
       onSave?.();
@@ -270,6 +273,33 @@ export default function BotSettings({ onSave }) {
                   value={opt.id}
                   checked={formData.max_answer_length === opt.id}
                   onChange={() => handleChange("max_answer_length", opt.id)}
+                  disabled={saving}
+                />
+                <span className="settings-tone-title">{opt.label}</span>
+                <span className="settings-tone-desc">{opt.desc}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label>AI pipeline</label>
+          <p className="field-desc">
+            Baseline is a simple, fast RAG pipeline. Enhanced adds intent classification, a reranker, query
+            rewriting, and prompt-injection detection — slower but more robust.
+          </p>
+          <div className="settings-tone-grid" role="radiogroup" aria-label="AI pipeline">
+            {[
+              { id: "baseline", label: "Baseline", desc: "Plain Python RAG — fast and simple." },
+              { id: "enhanced", label: "Enhanced", desc: "LangGraph: intent classification, reranker, injection guard." },
+            ].map((opt) => (
+              <label key={opt.id} className={`settings-tone-option ${formData.pipeline === opt.id ? "selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="bot-pipeline"
+                  value={opt.id}
+                  checked={formData.pipeline === opt.id}
+                  onChange={() => handleChange("pipeline", opt.id)}
                   disabled={saving}
                 />
                 <span className="settings-tone-title">{opt.label}</span>
