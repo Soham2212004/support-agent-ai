@@ -31,7 +31,9 @@ def serialize_settings(settings):
         "max_answer_length": settings.max_answer_length,
         "starter_questions": settings.starter_questions,
         "escalation_email": settings.escalation_email,
+        "widget_mode": settings.widget_mode,
         "avatar_url": settings.avatar_url,
+        "pipeline": settings.pipeline,
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
     }
 
@@ -112,6 +114,12 @@ def bot_settings(request):
             except ValidationError:
                 errors["escalation_email"] = "Enter a valid email address."
 
+        pipeline = str(data.get("pipeline", "")).strip().lower()
+        if not pipeline:
+            pipeline = BotSettings.Pipeline.BASELINE
+        elif pipeline not in BotSettings.Pipeline.values:
+            errors["pipeline"] = "Please select a valid pipeline."
+
         avatar_url = str(data.get("avatar_url", "")).strip()
         if avatar_url:
             try:
@@ -133,6 +141,7 @@ def bot_settings(request):
         settings.starter_questions = starter_questions
         settings.escalation_email = escalation_email
         settings.avatar_url = avatar_url
+        settings.pipeline = pipeline
         settings.save()
 
         return JsonResponse(

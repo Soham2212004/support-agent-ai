@@ -458,6 +458,9 @@ class BotSettings(models.Model):
         DEFAULT = "default", "Default widget"
         CUSTOM = "custom", "Custom integration"
 
+    class Pipeline(models.TextChoices):
+        BASELINE = "baseline", "Baseline (plain Python RAG)"
+        ENHANCED = "enhanced", "Enhanced (LangGraph, reranker, injection guard)"
     account = models.OneToOneField(ClientAccount, on_delete=models.CASCADE, related_name="bot_settings")
     name = models.CharField(max_length=100, blank=True, default="")
     greeting = models.TextField(blank=True, default=DEFAULT_BOT_GREETING)
@@ -465,6 +468,7 @@ class BotSettings(models.Model):
     custom_instructions = models.TextField(blank=True, default="")
     fallback_message = models.TextField(blank=True, default=DEFAULT_BOT_FALLBACK)
     widget_mode = models.CharField(max_length=10, choices=WidgetMode.choices, default=WidgetMode.DEFAULT)
+    pipeline = models.CharField(max_length=10, choices=Pipeline.choices, default=Pipeline.BASELINE)
 
     # answer behavior
     similarity_threshold = models.FloatField(default=0.75)

@@ -1,6 +1,76 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, getToken } from "../api.js";
 
+function UnansweredRow({ row }) {
+  const [adding, setAdding] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!answer.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.createFaqEntry({ question: row.question, answer });
+      setDone(true);
+      setAdding(false);
+    } catch (err) {
+      setError(err.message || "Could not create the FAQ entry.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li>
+      <div className="analytics-table-row-head">
+        <strong>{row.question}</strong>
+        <span className="publish-badge">{row.count}×</span>
+      </div>
+      <p className="upload-help">
+        {row.reason_label} · last asked {new Date(row.last_asked_at).toLocaleString()}
+      </p>
+      {done ? (
+        <p className="upload-help" style={{ color: "#15803d", fontWeight: 600 }}>
+          Added to your FAQ entries.
+        </p>
+      ) : adding ? (
+        <form onSubmit={submit} style={{ marginTop: "0.6rem" }}>
+          <textarea
+            rows={2}
+            maxLength={2000}
+            placeholder="Type the answer…"
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            disabled={busy}
+          />
+          <div className="doc-actions" style={{ marginTop: "0.5rem" }}>
+            <button className="button button-small" type="submit" disabled={busy || !answer.trim()}>
+              Save as FAQ
+            </button>
+            <button type="button" className="button button-ghost button-small" onClick={() => setAdding(false)} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+          {error && <p className="field-error">{error}</p>}
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="button button-ghost button-small"
+          style={{ marginTop: "0.5rem" }}
+          onClick={() => setAdding(true)}
+        >
+          Add as FAQ entry
+        </button>
+      )}
+    </li>
+  );
+}
+
 function DownvotedRow({ row }) {
   const [status, setStatus] = useState(row.note_status);
   const [note, setNote] = useState(row.note);
@@ -189,15 +259,7 @@ export default function Analytics() {
       ) : (
         <ul className="analytics-table">
           {data.top_unanswered.map((row, i) => (
-            <li key={i}>
-              <div className="analytics-table-row-head">
-                <strong>{row.question}</strong>
-                <span className="publish-badge">{row.count}×</span>
-              </div>
-              <p className="upload-help">
-                {row.reason_label} · last asked {new Date(row.last_asked_at).toLocaleString()}
-              </p>
-            </li>
+            <UnansweredRow key={i} row={row} />
           ))}
         </ul>
       )}

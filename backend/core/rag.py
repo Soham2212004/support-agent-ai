@@ -49,12 +49,14 @@ def is_smalltalk(text):
     return any(re.match(pat, clean) for pat in SMALLTALK_PATTERNS)
 
 
-def retrieve(account, document, question, published_version=None):
+def retrieve(account, document, question, published_version=None, top_k=None):
     """The best-matching passages, most similar first — from the document and, for a draft bot, FAQ entries too.
 
     A published bot's FAQ passages are already baked into its PublishedBotChunk snapshot at publish time,
-    so only the draft path needs to query FAQEntry separately here.
+    so only the draft path needs to query FAQEntry separately here. top_k overrides settings.SEARCH_TOP_K,
+    used by the enhanced pipeline to pull a wider candidate pool before reranking.
     """
+    top_k = top_k or settings.SEARCH_TOP_K
     embedding_model = published_version.embedding_model if published_version else settings.EMBEDDING_MODEL
     vector = embed_query(question, model_name=embedding_model)
 
@@ -64,7 +66,7 @@ def retrieve(account, document, question, published_version=None):
             PublishedBotChunk.objects.filter(version=published_version, embedding_model=embedding_model)
             .annotate(distance=CosineDistance("embedding", vector))
             .order_by("distance")
-            .defer("embedding")[: settings.SEARCH_TOP_K]
+            .defer("embedding")[: top_k]
         )
         for chunk in rows:
             label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
@@ -77,7 +79,7 @@ def retrieve(account, document, question, published_version=None):
                 DocumentChunk.objects.filter(account=account, document=document, embedding_model=embedding_model)
                 .annotate(distance=CosineDistance("embedding", vector))
                 .order_by("distance")
-                .defer("embedding")[: settings.SEARCH_TOP_K]
+                .defer("embedding")[: top_k]
             )
             for chunk in doc_rows:
                 label = f"Page {chunk.page_number}" if chunk.page_number else (chunk.section_label or "Document")
@@ -88,7 +90,7 @@ def retrieve(account, document, question, published_version=None):
         faq_rows = (
             FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=embedding_model)
             .annotate(distance=CosineDistance("embedding", vector))
-            .order_by("distance")[: settings.SEARCH_TOP_K]
+            .order_by("distance")[: top_k]
         )
         for entry in faq_rows:
             candidates.append(
@@ -102,7 +104,7 @@ def retrieve(account, document, question, published_version=None):
 
     candidates.sort(key=lambda c: c["distance"])
     passages = []
-    for number, c in enumerate(candidates[: settings.SEARCH_TOP_K], start=1):
+    for number, c in enumerate(candidates[:top_k], start=1):
         passages.append(
             {"n": number, "label": c["label"], "page": c["page"], "text": c["text"], "score": round(1 - c["distance"], 3)}
         )
@@ -194,9 +196,15 @@ def extract_citations(answer, passages):
     return citations
 
 
-def stream_answer(account, document, history, question, provider, published_version=None):
-    """Yield {"type": "token", "text": ...} pieces, then one {"type": "final", ...} event."""
-    if published_version:
+def stream_answer(account, document, history, question, provider, published_version=None, bot_settings_override=None):
+    """Yield {"type": "token", "text": ...} pieces, then one {"type": "final", ...} event.
+
+    bot_settings_override lets a caller (e.g. the evaluation harness) run a specific pipeline
+    without mutating the account's saved BotSettings row.
+    """
+    if bot_settings_override is not None:
+        bot_settings = bot_settings_override
+    elif published_version:
         snapshot = published_version.settings_snapshot
         bot_settings = SimpleNamespace(
             display_name=snapshot["display_name"],
@@ -206,9 +214,16 @@ def stream_answer(account, document, history, question, provider, published_vers
             similarity_threshold=snapshot.get("similarity_threshold", 0.75),
             show_citations=snapshot.get("show_citations", True),
             max_answer_length=snapshot.get("max_answer_length", BotSettings.AnswerLength.STANDARD),
+            pipeline=snapshot.get("pipeline", BotSettings.Pipeline.BASELINE),
         )
-    else:
+    elif bot_settings_override is None:
         bot_settings = BotSettings.get_for_account(account)
+
+    if getattr(bot_settings, "pipeline", "baseline") == "enhanced":
+        from .rag_enhanced import stream_answer_enhanced
+
+        yield from stream_answer_enhanced(account, document, history, question, provider, bot_settings, published_version)
+        return
 
     def _fallback(reason, tokens_in=0, tokens_out=0):
         return {

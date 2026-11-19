@@ -109,6 +109,8 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BEAT_SCHEDULE = {
     "check-handoff-timers": {
         "task": "core.tasks.check_handoff_timers",
@@ -117,6 +119,10 @@ CELERY_BEAT_SCHEDULE = {
     "check-usage-warnings": {
         "task": "core.tasks.check_usage_warnings",
         "schedule": 3600.0,  # hourly is plenty for a monthly threshold
+    },
+    "send-lead-digest": {
+        "task": "core.tasks.send_lead_digest",
+        "schedule": crontab(hour=9, minute=0),  # 09:00 UTC daily
     },
 }
 # ---- Public widget ----

@@ -65,6 +65,46 @@ def check_usage_warnings():
 
 
 @shared_task
+def send_lead_digest():
+    """Runs once daily (Celery beat, 09:00 UTC). Summarizes new/returning leads per client."""
+    import logging
+    from datetime import timedelta
+
+    from django.core.mail import send_mail
+    from django.utils import timezone
+
+    from .models import ClientAccount, Lead
+
+    logger = logging.getLogger(__name__)
+    cutoff = timezone.now() - timedelta(hours=24)
+
+    for account in ClientAccount.objects.filter(status=ClientAccount.Status.APPROVED):
+        new_leads = list(Lead.objects.filter(account=account, first_seen_at__gte=cutoff))
+        returning = list(
+            Lead.objects.filter(account=account, last_seen_at__gte=cutoff).exclude(first_seen_at__gte=cutoff)
+        )
+        if not new_leads and not returning:
+            continue
+
+        lines = [f"Lead activity in the last 24 hours for {account.company_name}:\n"]
+        for lead in new_leads:
+            lines.append(f"- NEW: {lead.name} <{lead.email}>")
+        for lead in returning:
+            lines.append(f"- Returning: {lead.name} <{lead.email}> ({lead.conversation_count} conversations total)")
+
+        try:
+            send_mail(
+                subject=f"Daily lead digest — {len(new_leads)} new lead(s)",
+                message="\n".join(lines),
+                from_email=None,
+                recipient_list=[account.email],
+                fail_silently=True,
+            )
+        except Exception:
+            logger.exception("Could not send lead digest to %s", account.email)
+
+
+@shared_task
 def check_handoff_timers():
     """Runs every minute (Celery beat): sends 10-minute reminders and expires handoffs after 30 minutes idle."""
     import logging

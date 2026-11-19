@@ -118,6 +118,7 @@ def publish(request):
                 "avatar_url": bot_settings.avatar_url,
                 "escalation_email": bot_settings.escalation_email,
                 "widget_mode": bot_settings.widget_mode,
+                "pipeline": bot_settings.pipeline,
             },
             embedding_model=embedding_model,
         )
@@ -233,6 +234,7 @@ def restore_version(request, version_id):
         bot_settings.avatar_url = settings_snapshot.get("avatar_url", "")
         bot_settings.escalation_email = settings_snapshot.get("escalation_email", "")
         bot_settings.widget_mode = settings_snapshot.get("widget_mode", BotSettings.WidgetMode.DEFAULT)
+        bot_settings.pipeline = settings_snapshot.get("pipeline", BotSettings.Pipeline.BASELINE)
         bot_settings.save()
 
     return JsonResponse(
