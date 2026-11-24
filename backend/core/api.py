@@ -19,6 +19,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import ClientAccount
+from .public_common import reserve_rate_limit
+
+LOGIN_RATE_PER_IP_PER_MINUTE = 10
+LOGIN_RATE_PER_ACCOUNT_PER_15_MIN = 5
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +82,7 @@ def read_json(request):
 
 
 def make_token(account):
-    return signing.dumps({"id": account.pk}, salt=TOKEN_SALT)
+    return signing.dumps({"id": account.pk, "tv": account.token_version}, salt=TOKEN_SALT)
 
 
 def account_from_request(request):
@@ -89,7 +93,14 @@ def account_from_request(request):
         payload = signing.loads(header[7:].strip(), salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
     except signing.BadSignature:  # includes expired tokens
         return None
-    return ClientAccount.objects.filter(pk=payload.get("id")).first()
+    account = ClientAccount.objects.filter(pk=payload.get("id")).first()
+    if account is None:
+        return None
+    # A token issued before the account's last "log out everywhere" or password change
+    # carries an older version number and is rejected, even though it hasn't expired yet.
+    if payload.get("tv") != account.token_version:
+        return None
+    return account
 
 
 def serialize(account):
@@ -264,6 +275,13 @@ def resend_verification(request):
     return JsonResponse({"message": "If that email needs verifying, a new link has been sent."})
 
 
+def _client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
+
+
 @csrf_exempt
 @require_POST
 def login(request):
@@ -273,6 +291,17 @@ def login(request):
 
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
+
+    ip = _client_ip(request)
+    if not reserve_rate_limit("login_ip", ip, LOGIN_RATE_PER_IP_PER_MINUTE):
+        return error("Too many login attempts. Please wait a minute and try again.", 429)
+
+    # A per-account lock, keyed by a 15-minute bucket, blocks repeated guesses against one
+    # specific email even if the attacker spreads requests across many IPs.
+    if email and not reserve_rate_limit("login_account", email, LOGIN_RATE_PER_ACCOUNT_PER_15_MIN):
+        return error(
+            "Too many failed attempts for this account. Please wait 15 minutes and try again.", 429
+        )
 
     account = ClientAccount.objects.filter(email=email).first()
     if account is None or not account.check_password(password):
@@ -350,6 +379,46 @@ def confirm_password_reset(request):
         return error("This reset link is invalid or has expired.", 400)
 
     account.set_password(new_password)
-    account.save(update_fields=["password"])
+    account.token_version += 1
+    account.save(update_fields=["password", "token_version"])
 
     return JsonResponse({"message": "Your password has been reset. You can now sign in."})
+
+
+
+@csrf_exempt
+@require_POST
+def change_password(request):
+    account = account_from_request(request)
+    if account is None:
+        return error("Please sign in.", 401)
+
+    data = read_json(request) or {}
+    current_password = str(data.get("current_password", ""))
+    new_password = str(data.get("new_password", ""))
+
+    if not account.check_password(current_password):
+        return error("Current password is incorrect.", 400, {"current_password": "Incorrect password."})
+    if len(new_password) < 8:
+        return error("Use at least 8 characters.", 400, {"new_password": "Use at least 8 characters."})
+    if len(new_password) > 128:
+        return error("Password is too long.", 400, {"new_password": "Password is too long."})
+
+    account.set_password(new_password)
+    account.token_version += 1  # invalidates every token issued before this change, including this request's own
+    account.save(update_fields=["password", "token_version"])
+
+    # Issue a fresh token for this session so the caller isn't immediately logged out too.
+    return JsonResponse({"message": "Password changed.", "token": make_token(account)})
+
+
+@csrf_exempt
+@require_POST
+def logout_everywhere(request):
+    account = account_from_request(request)
+    if account is None:
+        return error("Please sign in.", 401)
+
+    account.token_version += 1
+    account.save(update_fields=["token_version"])
+    return JsonResponse({"message": "You've been logged out of all devices."})

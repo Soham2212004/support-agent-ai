@@ -18,11 +18,31 @@ def _serialize(lead):
     }
 
 
+PAGE_SIZE = 20
+
+
 @require_GET
 @client_required(approved_only=True, allow_suspended_read=True)
 def lead_list(request):
+    try:
+        page = max(int(request.GET.get("page", "1")), 1)
+    except ValueError:
+        page = 1
+
     leads = Lead.objects.filter(account=request.client_account)
-    return JsonResponse({"leads": [_serialize(lead) for lead in leads], "count": leads.count()})
+    total = leads.count()
+    start = (page - 1) * PAGE_SIZE
+    page_leads = leads[start : start + PAGE_SIZE]
+
+    return JsonResponse(
+        {
+            "leads": [_serialize(lead) for lead in page_leads],
+            "count": total,
+            "page": page,
+            "page_size": PAGE_SIZE,
+            "has_more": start + PAGE_SIZE < total,
+        }
+    )
 
 
 @require_GET

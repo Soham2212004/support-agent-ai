@@ -69,7 +69,9 @@ def publication(request):
 def publish(request):
     account = request.client_account
     document = ClientDocument.objects.filter(account=account).first()
-    faq_entries = list(FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY))
+    faq_entries = list(
+        FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY, deleted_at__isnull=True)
+    )
 
     chunks = []
     if document is not None:

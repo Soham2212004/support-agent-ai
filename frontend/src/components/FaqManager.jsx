@@ -73,13 +73,38 @@ export default function FaqManager() {
   }
 
   async function remove(id) {
-    if (!window.confirm("Delete this FAQ entry?")) return;
+    if (!window.confirm("Delete this FAQ entry? You can restore it from 'Recently deleted' for 30 days.")) return;
     setBusy(true);
     try {
       await api.deleteFaqEntry(id);
       await load();
     } catch (err) {
       setError(err.message || "Could not delete this entry.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [deleted, setDeleted] = useState([]);
+  const [showDeleted, setShowDeleted] = useState(false);
+
+  async function loadDeleted() {
+    try {
+      const data = await api.getDeletedFaqEntries();
+      setDeleted(data.entries);
+    } catch {
+      /* non-critical */
+    }
+  }
+
+  async function restore(id) {
+    setBusy(true);
+    try {
+      await api.restoreFaqEntry(id);
+      await loadDeleted();
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not restore this entry.");
     } finally {
       setBusy(false);
     }
@@ -172,6 +197,39 @@ export default function FaqManager() {
               </div>
             </li>
           ))}
+        </ul>
+      )}
+
+      <div className="doc-actions">
+        <button
+          type="button"
+          className="button button-ghost button-small"
+          onClick={() => {
+            setShowDeleted((s) => !s);
+            if (!showDeleted) loadDeleted();
+          }}
+        >
+          {showDeleted ? "Hide" : "Show"} recently deleted
+        </button>
+      </div>
+
+      {showDeleted && (
+        <ul className="publish-version-list" style={{ marginTop: "0.75rem" }}>
+          {deleted.length === 0 ? (
+            <p className="upload-help">Nothing deleted in the last 30 days.</p>
+          ) : (
+            deleted.map((entry) => (
+              <li key={entry.id}>
+                <div>
+                  <strong>{entry.question}</strong>
+                  <p>{entry.answer}</p>
+                </div>
+                <button type="button" className="button button-small" onClick={() => restore(entry.id)} disabled={busy}>
+                  Restore
+                </button>
+              </li>
+            ))
+          )}
         </ul>
       )}
     </section>

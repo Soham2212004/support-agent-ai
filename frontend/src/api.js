@@ -73,6 +73,9 @@ export const api = {
   requestPasswordReset: (email) => request("/password-reset/request/", { method: "POST", body: { email } }),
   confirmPasswordReset: (token, password) =>
     request("/password-reset/confirm/", { method: "POST", body: { token, password } }),
+  changePassword: (currentPassword, newPassword) =>
+    request("/change-password/", { method: "POST", body: { current_password: currentPassword, new_password: newPassword }, auth: true }),
+  logoutEverywhere: () => request("/logout-everywhere/", { method: "POST", body: {}, auth: true }),
   me: () => request("/me/", { auth: true }),
   getDocument: () => request("/document/", { auth: true }),
   uploadDocument: (file) => {
@@ -88,6 +91,9 @@ export const api = {
   createFaqEntry: (entry) => request("/faq/", { method: "POST", body: entry, auth: true }),
   updateFaqEntry: (id, entry) => request(`/faq/${id}/`, { method: "PATCH", body: entry, auth: true }),
   deleteFaqEntry: (id) => request(`/faq/${id}/`, { method: "DELETE", auth: true }),
+  getDeletedFaqEntries: () => request("/faq/deleted/", { auth: true }),
+  restoreFaqEntry: (id) => request(`/faq/${id}/restore/`, { method: "POST", body: {}, auth: true }),
+  restoreDocument: () => request("/document/restore/", { method: "POST", body: {}, auth: true }),
   getBotSettings: () => request("/bot-settings/", { auth: true }),
   saveBotSettings: (settings) => request("/bot-settings/", { method: "POST", body: settings, auth: true }),
   getPublication: () => request("/publication/", { auth: true }),
@@ -98,7 +104,7 @@ export const api = {
   getHandoffDetail: (id) => request(`/handoffs/${id}/`, { auth: true }),
   replyHandoff: (id, content) => request(`/handoffs/${id}/reply/`, { method: "POST", body: { content }, auth: true }),
   saveDownvoteNote: (payload) => request("/analytics/downvote-note/", { method: "POST", body: payload, auth: true }),
-  getLeads: () => request("/leads/", { auth: true }),
+  getLeads: (page = 1) => request(`/leads/?page=${page}`, { auth: true }),
   getConversations: (page, search) =>
     request(`/conversations/?page=${page}&search=${encodeURIComponent(search || "")}`, { auth: true }),
   getConversationDetail: (id) => request(`/conversations/${id}/`, { auth: true }),
