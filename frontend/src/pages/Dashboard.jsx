@@ -8,6 +8,7 @@ import Publishing from "../components/Publishing.jsx";
 import Analytics from "../components/Analytics.jsx";
 import HandoffRequests from "../components/HandoffRequests.jsx";
 import Leads from "../components/Leads.jsx";
+import Conversations from "../components/Conversations.jsx";
 import AccountSettings from "../components/AccountSettings.jsx";
 import OnboardingChecklist from "../components/OnboardingChecklist.jsx";
 
@@ -200,6 +201,14 @@ export default function Dashboard() {
         </button>
         <button
           type="button"
+          className={`dash-tab ${activeTab === "conversations" ? "dash-tab-active" : ""}`}
+          onClick={() => setActiveTab("conversations")}
+          aria-current={activeTab === "conversations" ? "page" : undefined}
+        >
+          Conversations
+        </button>
+        <button
+          type="button"
           className={`dash-tab ${activeTab === "leads" ? "dash-tab-active" : ""}`}
           onClick={() => setActiveTab("leads")}
           aria-current={activeTab === "leads" ? "page" : undefined}
@@ -226,6 +235,7 @@ export default function Dashboard() {
       {activeTab === "publish" && <Publishing />}
       {activeTab === "analytics" && <Analytics />}
       {activeTab === "handoffs" && <HandoffRequests onCountChange={setHandoffCount} />}
+      {activeTab === "conversations" && <Conversations />}
       {activeTab === "leads" && <Leads />}
       {activeTab === "account" && <AccountSettings />}
     </main>

@@ -70,6 +70,9 @@ export const api = {
   login: (email, password) => request("/login/", { method: "POST", body: { email, password } }),
   verifyEmail: (token) => request("/verify-email/", { method: "POST", body: { token } }),
   resendVerification: (email) => request("/resend-verification/", { method: "POST", body: { email } }),
+  requestPasswordReset: (email) => request("/password-reset/request/", { method: "POST", body: { email } }),
+  confirmPasswordReset: (token, password) =>
+    request("/password-reset/confirm/", { method: "POST", body: { token, password } }),
   me: () => request("/me/", { auth: true }),
   getDocument: () => request("/document/", { auth: true }),
   uploadDocument: (file) => {
@@ -96,6 +99,9 @@ export const api = {
   replyHandoff: (id, content) => request(`/handoffs/${id}/reply/`, { method: "POST", body: { content }, auth: true }),
   saveDownvoteNote: (payload) => request("/analytics/downvote-note/", { method: "POST", body: payload, auth: true }),
   getLeads: () => request("/leads/", { auth: true }),
+  getConversations: (page, search) =>
+    request(`/conversations/?page=${page}&search=${encodeURIComponent(search || "")}`, { auth: true }),
+  getConversationDetail: (id) => request(`/conversations/${id}/`, { auth: true }),
   deleteAccount: (password) => request("/account/delete/", { method: "POST", body: { password }, auth: true }),
   requestUpgrade: (plan, message) => request("/upgrade-request/", { method: "POST", body: { plan, message }, auth: true }),
   getPublicConfig: () => request("/public/config/"),

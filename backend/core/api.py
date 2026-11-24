@@ -28,6 +28,8 @@ TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # sign-in lasts 7 days
 EMAIL_VERIFY_SALT = "support-agent-ai.email-verify"
 EMAIL_VERIFY_MAX_AGE = 60 * 60 * 24  # 24 hours
 
+PASSWORD_RESET_SALT = "support-agent-ai.password-reset"
+PASSWORD_RESET_MAX_AGE = 60 * 60  # 1 hour
 # Common disposable/throwaway email providers. A local, free check — no external service.
 DISPOSABLE_EMAIL_DOMAINS = {
     "mailinator.com", "tempmail.com", "temp-mail.org", "10minutemail.com",
@@ -285,3 +287,69 @@ def me(request):
     if account is None:
         return error("Please sign in.", 401)
     return JsonResponse({"account": serialize(account)})
+
+
+
+@csrf_exempt
+@require_POST
+def request_password_reset(request):
+    data = read_json(request)
+    if data is None:
+        return error("Invalid request.")
+    email = str(data.get("email", "")).strip().lower()
+
+    account = ClientAccount.objects.filter(email=email).first()
+    if account is not None:
+        token = signing.dumps({"id": account.pk}, salt=PASSWORD_RESET_SALT)
+        frontend_base = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000")
+        link = f"{frontend_base}/reset-password?token={token}"
+        try:
+            send_mail(
+                subject="Reset your password — Support Agent AI",
+                message=(
+                    f"Hi {account.name},\n\n"
+                    f"Click the link below to set a new password:\n\n"
+                    f"{link}\n\n"
+                    f"This link expires in 1 hour. If you didn't request this, ignore this email."
+                ),
+                from_email=None,
+                recipient_list=[account.email],
+                fail_silently=True,
+            )
+        except Exception:
+            logger.exception("Could not send password reset email to %s", account.email)
+
+    # Same response whether or not the account exists, so this endpoint never reveals
+    # which emails are registered.
+    return JsonResponse({"message": "If that email is registered, a reset link has been sent."})
+
+
+@csrf_exempt
+@require_POST
+def confirm_password_reset(request):
+    data = read_json(request)
+    if data is None:
+        return error("Invalid request.")
+    token = str(data.get("token", "")).strip()
+    new_password = str(data.get("password", ""))
+
+    if not token:
+        return error("A reset code is required.", 400)
+    if len(new_password) < 8:
+        return error("Use at least 8 characters.", 400, {"password": "Use at least 8 characters."})
+    if len(new_password) > 128:
+        return error("Password is too long.", 400, {"password": "Password is too long."})
+
+    try:
+        payload = signing.loads(token, salt=PASSWORD_RESET_SALT, max_age=PASSWORD_RESET_MAX_AGE)
+    except signing.BadSignature:
+        return error("This reset link is invalid or has expired.", 400)
+
+    account = ClientAccount.objects.filter(pk=payload.get("id")).first()
+    if account is None:
+        return error("This reset link is invalid or has expired.", 400)
+
+    account.set_password(new_password)
+    account.save(update_fields=["password"])
+
+    return JsonResponse({"message": "Your password has been reset. You can now sign in."})

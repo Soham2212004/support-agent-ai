@@ -1,4 +1,4 @@
-name: support-agent-ai
+#name: support-agent-ai
 
 services:
   # ---------- 0. Redis (rate limiting) ----------

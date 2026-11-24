@@ -73,6 +73,9 @@ export default function Login() {
         </button>
 
         <p className="form-foot">
+          <Link to="/forgot-password">Forgot your password?</Link>
+        </p>
+        <p className="form-foot">
           New here? <Link to="/register">Try our services</Link>
         </p>
       </form>
