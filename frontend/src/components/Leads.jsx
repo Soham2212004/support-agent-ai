@@ -3,14 +3,20 @@ import { api, getToken } from "../api.js";
 
 export default function Leads() {
   const [leads, setLeads] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (pageNum) => {
     setError("");
+    setLoading(true);
     try {
-      const data = await api.getLeads();
+      const data = await api.getLeads(pageNum);
       setLeads(data.leads);
+      setHasMore(data.has_more);
+      setCount(data.count);
     } catch (err) {
       setError(err.message || "Could not load leads.");
     } finally {
@@ -19,8 +25,9 @@ export default function Leads() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function exportCsv(e) {
     e.preventDefault();
@@ -53,7 +60,7 @@ export default function Leads() {
       <div className="settings-head">
         <div>
           <h2 id="leads-title">Leads</h2>
-          <p className="upload-help">Every visitor who has started a chat with your published bot.</p>
+          <p className="upload-help">Every visitor who has started a chat with your published bot. {count} total.</p>
         </div>
         <a className="button button-small button-ghost" href="/api/leads/export.csv" onClick={exportCsv}>
           Export CSV
@@ -80,6 +87,28 @@ export default function Leads() {
             </li>
           ))}
         </ul>
+      )}
+
+      {(page > 1 || hasMore) && (
+        <div className="doc-actions">
+          <button
+            type="button"
+            className="button button-ghost button-small"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="upload-help">Page {page}</span>
+          <button
+            type="button"
+            className="button button-ghost button-small"
+            disabled={!hasMore}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </div>
       )}
     </section>
   );

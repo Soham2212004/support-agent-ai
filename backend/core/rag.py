@@ -88,7 +88,10 @@ def retrieve(account, document, question, published_version=None, top_k=None):
                 )
 
         faq_rows = (
-            FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=embedding_model)
+            FAQEntry.objects.filter(
+                account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=embedding_model,
+                deleted_at__isnull=True,
+            )
             .annotate(distance=CosineDistance("embedding", vector))
             .order_by("distance")[: top_k]
         )

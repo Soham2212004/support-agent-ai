@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, clearToken, getToken } from "../api.js";
+import { api, clearToken, getToken, setToken } from "../api.js";
 
 export default function AccountSettings() {
   const navigate = useNavigate();
@@ -8,6 +8,49 @@ export default function AccountSettings() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutNotice, setLogoutNotice] = useState("");
+
+  async function changePassword(e) {
+    e.preventDefault();
+    setPasswordNotice("");
+    if (newPassword !== confirmNewPassword) {
+      setPasswordNotice("New passwords do not match.");
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      const res = await api.changePassword(currentPassword, newPassword);
+      setToken(res.token);
+      setPasswordNotice("Password changed. You've been logged out of all other devices.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (err) {
+      setPasswordNotice(err.message || "Could not change your password.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  async function logoutEverywhere() {
+    if (!window.confirm("Log out of all devices, including this one? You'll need to sign in again.")) return;
+    setLogoutBusy(true);
+    try {
+      await api.logoutEverywhere();
+      clearToken();
+      navigate("/login");
+    } catch (err) {
+      setLogoutNotice(err.message || "Could not log out of all devices.");
+    } finally {
+      setLogoutBusy(false);
+    }
+  }
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [upgradeNotice, setUpgradeNotice] = useState("");
   const [upgradeBusy, setUpgradeBusy] = useState(false);
@@ -70,6 +113,64 @@ export default function AccountSettings() {
       </div>
 
       {error && <p className="form-error" role="alert">{error}</p>}
+
+      <div className="publish-section">
+        <h3>Change password</h3>
+        <form className="form" onSubmit={changePassword}>
+          <div className="field">
+            <label htmlFor="current-password">Current password</label>
+            <input
+              id="current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              disabled={passwordBusy}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="new-password-account">New password</label>
+            <input
+              id="new-password-account"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={passwordBusy}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="confirm-new-password-account">Confirm new password</label>
+            <input
+              id="confirm-new-password-account"
+              type="password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              disabled={passwordBusy}
+              required
+            />
+          </div>
+          <button className="button button-small" type="submit" disabled={passwordBusy}>
+            Change password
+          </button>
+          {passwordNotice && (
+            <p className="notice" role="status">
+              {passwordNotice}
+            </p>
+          )}
+        </form>
+      </div>
+
+      <div className="publish-section">
+        <h3>Sessions</h3>
+        <p className="upload-help">
+          Signed in on a device you don't recognize? Log out everywhere, including this device, and sign back in.
+        </p>
+        <button type="button" className="button button-ghost" onClick={logoutEverywhere} disabled={logoutBusy}>
+          {logoutBusy ? "Logging out…" : "Log out of all devices"}
+        </button>
+        {logoutNotice && <p className="form-error">{logoutNotice}</p>}
+      </div>
 
       <div className="doc-actions">
         <a className="button button-ghost" href="/api/account/export.zip" onClick={exportZip}>

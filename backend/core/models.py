@@ -65,6 +65,7 @@ class ClientAccount(models.Model):
     email_verified_at = models.DateTimeField(null=True, blank=True, editable=False)
     suspended_at = models.DateTimeField(null=True, blank=True, editable=False)
     suspension_reason = models.TextField(blank=True, default="")
+    token_version = models.PositiveIntegerField(default=1)
 
     class Meta:
         ordering = ["-created_at"]
@@ -143,6 +144,7 @@ class ClientDocument(models.Model):
     index_started_at = models.DateTimeField(null=True, blank=True)
     indexed_at = models.DateTimeField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-uploaded_at"]
@@ -350,6 +352,7 @@ class FAQEntry(models.Model):
     index_error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-updated_at"]

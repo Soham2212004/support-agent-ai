@@ -1,7 +1,7 @@
 """CRUD API for FAQ entries: a typed Q&A knowledge source alongside the uploaded document."""
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from .api import client_required, error, read_json
 from .models import FAQEntry
@@ -48,10 +48,10 @@ def faq_list(request):
     account = request.client_account
 
     if request.method == "GET":
-        entries = FAQEntry.objects.filter(account=account)
+        entries = FAQEntry.objects.filter(account=account, deleted_at__isnull=True)
         return JsonResponse({"entries": [serialize(e) for e in entries]})
 
-    if FAQEntry.objects.filter(account=account).count() >= MAX_ENTRIES_PER_ACCOUNT:
+    if FAQEntry.objects.filter(account=account, deleted_at__isnull=True).count() >= MAX_ENTRIES_PER_ACCOUNT:
         return error(f"You can have up to {MAX_ENTRIES_PER_ACCOUNT} FAQ entries.", 409)
 
     data = read_json(request) or {}
@@ -68,15 +68,18 @@ def faq_list(request):
 
 @csrf_exempt
 @require_http_methods(["PATCH", "DELETE"])
-@client_required(approved_only=True)
+@client_required(approved_only=True, allow_suspended_read=True)
 def faq_detail(request, entry_id):
     account = request.client_account
-    entry = FAQEntry.objects.filter(pk=entry_id, account=account).first()
+    entry = FAQEntry.objects.filter(pk=entry_id, account=account, deleted_at__isnull=True).first()
     if entry is None:
         return error("FAQ entry not found.", 404)
 
     if request.method == "DELETE":
-        entry.delete()
+        from django.utils import timezone
+
+        entry.deleted_at = timezone.now()
+        entry.save(update_fields=["deleted_at"])
         return JsonResponse({"message": "FAQ entry deleted."})
 
     data = read_json(request) or {}
@@ -94,4 +97,30 @@ def faq_detail(request, entry_id):
     entry.save()
     if changed:
         _queue_index(entry.pk)
+    return JsonResponse({"entry": serialize(entry)})
+
+
+@require_GET
+@client_required(approved_only=True, allow_suspended_read=True)
+def faq_deleted_list(request):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cutoff = timezone.now() - timedelta(days=30)
+    entries = FAQEntry.objects.filter(
+        account=request.client_account, deleted_at__isnull=False, deleted_at__gte=cutoff
+    ).order_by("-deleted_at")
+    return JsonResponse({"entries": [serialize(e) for e in entries]})
+
+
+@csrf_exempt
+@require_POST
+@client_required(approved_only=True)
+def faq_restore(request, entry_id):
+    entry = FAQEntry.objects.filter(pk=entry_id, account=request.client_account, deleted_at__isnull=False).first()
+    if entry is None:
+        return error("Deleted FAQ entry not found.", 404)
+    entry.deleted_at = None
+    entry.save(update_fields=["deleted_at"])
     return JsonResponse({"entry": serialize(entry)})

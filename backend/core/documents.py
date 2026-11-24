@@ -41,8 +41,13 @@ def serialize_document(doc):
         "chunk_count": doc.chunk_count,
     }
 
+RESTORE_WINDOW = timedelta(days=30)
+
+
 def _archive_existing(document):
-    """Keep a metadata snapshot before a document is replaced or removed; the post_delete signal removes the file."""
+    """Keep a metadata snapshot, then soft-delete: the row and its file stay in place
+    for a 30-day recovery window instead of vanishing immediately.
+    """
     DocumentArchive.objects.create(
         account=document.account,
         original_filename=document.original_filename,
@@ -52,7 +57,8 @@ def _archive_existing(document):
         chunk_count=document.chunk_count,
         uploaded_at=document.uploaded_at,
     )
-    document.delete()
+    document.deleted_at = timezone.now()
+    document.save(update_fields=["deleted_at"])
 
 
 @csrf_exempt
@@ -60,7 +66,7 @@ def _archive_existing(document):
 @client_required(approved_only=True, allow_suspended_read=True)
 def document(request):
     account = request.client_account
-    existing = ClientDocument.objects.filter(account=account).first()
+    existing = ClientDocument.objects.filter(account=account, deleted_at__isnull=True).first()
 
     # ---- GET: show the current document (or null) ----
     if request.method == "GET":
@@ -75,7 +81,7 @@ def document(request):
         _archive_existing(existing)
         return JsonResponse({"message": "Document deleted."})
 
-    # ---- POST: upload. Replaces any existing document, archiving its metadata first. ----
+    # ---- POST: upload. Replaces any existing (non-deleted) document, archiving its metadata first. ----
     upload = request.FILES.get("file")
     if upload is None:
         return error("Choose a file to upload.", 400)
@@ -171,7 +177,7 @@ def refresh_stale(doc):
 @client_required(approved_only=True)
 def reindex(request):
     """Prepare the document for search again (also used for documents uploaded before search existed)."""
-    doc = ClientDocument.objects.filter(account=request.client_account).first()
+    doc = ClientDocument.objects.filter(account=request.client_account, deleted_at__isnull=True).first()
     if doc is None:
         return error("You have no document.", 404)
 
@@ -200,8 +206,10 @@ def search(request):
     if len(query) > MAX_QUERY_CHARS:
         return error(f"Keep your question under {MAX_QUERY_CHARS} characters.", 400)
 
-    doc = ClientDocument.objects.filter(account=account).first()
-    faq_ready = FAQEntry.objects.filter(account=account, index_status=FAQEntry.IndexStatus.READY).exists()
+    doc = ClientDocument.objects.filter(account=account, deleted_at__isnull=True).first()
+    faq_ready = FAQEntry.objects.filter(
+        account=account, index_status=FAQEntry.IndexStatus.READY, deleted_at__isnull=True
+    ).exists()
     doc_ready = False
     if doc is not None:
         refresh_stale(doc)
@@ -238,7 +246,8 @@ def search(request):
     if faq_ready:
         faq_matches = (
             FAQEntry.objects.filter(
-                account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=settings.EMBEDDING_MODEL
+                account=account, index_status=FAQEntry.IndexStatus.READY, embedding_model=settings.EMBEDDING_MODEL,
+                deleted_at__isnull=True,
             )
             .annotate(distance=CosineDistance("embedding", vector))
             .order_by("distance")[: settings.SEARCH_TOP_K]
@@ -269,3 +278,26 @@ def search(request):
         for rank, row in enumerate(top, start=1)
     ]
     return JsonResponse({"query": query, "results": results})
+
+
+@csrf_exempt
+@require_POST
+@client_required(approved_only=True)
+def restore_document(request):
+    """Undoes a soft-delete within the 30-day recovery window, as long as nothing has been uploaded since."""
+    account = request.client_account
+    if ClientDocument.objects.filter(account=account, deleted_at__isnull=True).exists():
+        return error("You already have a document. Delete it first before restoring an older one.", 409)
+
+    cutoff = timezone.now() - RESTORE_WINDOW
+    deleted = (
+        ClientDocument.objects.filter(account=account, deleted_at__isnull=False, deleted_at__gte=cutoff)
+        .order_by("-deleted_at")
+        .first()
+    )
+    if deleted is None:
+        return error("No recently deleted document found to restore.", 404)
+
+    deleted.deleted_at = None
+    deleted.save(update_fields=["deleted_at"])
+    return JsonResponse({"document": serialize_document(deleted)})
